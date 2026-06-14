@@ -134,6 +134,7 @@ footer{background:#080503;padding:36px 5vw;text-align:center;border-top:1px soli
   .product-desc{display:none}
 }
 </style>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body>
 <nav>
@@ -241,8 +242,9 @@ footer{background:#080503;padding:36px 5vw;text-align:center;border-top:1px soli
   <div class="cart-items" id="cartItems"><div class="cart-empty"><p>Your cart is empty.</p></div></div>
   <div class="cart-footer">
     <div class="cart-subtotal"><span>Subtotal</span><span class="cart-total-amt" id="cartTotal">Rs.0</span></div>
-    <p class="cart-ship-note">Order via WhatsApp for fastest service</p>
-    <button class="btn-checkout-wa" onclick="orderViaWhatsApp()">&#128172; Order via WhatsApp</button>
+    <p class="cart-ship-note">Free shipping above Rs.499</p>
+    <button class="btn-checkout-wa" onclick="startRazorpay()" id="payBtn">Pay Now</button>
+    <button style="width:100%;background:var(--wa);color:white;border:none;padding:11px;font-family:Cinzel,serif;font-size:0.75rem;letter-spacing:0.1em;cursor:pointer;border-radius:3px;margin-top:8px" onclick="orderViaWhatsApp()">&#128172; Order via WhatsApp instead</button>
   </div>
 </div>
 <div class="toast" id="toast"></div>
@@ -370,6 +372,57 @@ function showToast(msg){
 
 function toggleMenu(){document.getElementById("navLinks").classList.toggle("mob-open");}
 function closeMenu(){document.getElementById("navLinks").classList.remove("mob-open");}
+
+function startRazorpay(){
+  if(!cart.length){showToast("Your cart is empty!");return;}
+  var total = getTotal();
+  if(total <= 0){
+    showToast("Please wait for prices to be updated!");
+    setTimeout(function(){orderViaWhatsApp();},1500);
+    return;
+  }
+  var itemList = "";
+  for(var i=0;i<cart.length;i++){
+    itemList += cart[i].name + " x" + cart[i].qty;
+    if(i < cart.length-1){itemList += ", ";}
+  }
+  var options = {
+    key: "rzp_live_T0ZeG8Um5glZ4B",
+    amount: total * 100,
+    currency: "INR",
+    name: "Onam Agarbathi",
+    description: itemList,
+    image: "",
+    handler: function(response){
+      showToast("Payment successful! Order confirmed.");
+      var msg = "Hi! I have completed payment for my order.%0A%0APayment ID: " + response.razorpay_payment_id + "%0A%0AItems: " + itemList + "%0A%0ATotal: Rs." + total + "%0A%0APlease confirm dispatch. Thank you!";
+      cart = [];
+      updateCartUI();
+      toggleCart();
+      setTimeout(function(){
+        window.open("https://wa.me/919845563633?text=" + msg, "_blank");
+      }, 1500);
+    },
+    prefill:{
+      name: "",
+      email: "",
+      contact: ""
+    },
+    notes:{
+      order_items: itemList
+    },
+    theme:{
+      color: "#C9A84C"
+    },
+    modal:{
+      ondismiss: function(){
+        showToast("Payment cancelled.");
+      }
+    }
+  };
+  var rzp = new Razorpay(options);
+  rzp.open();
+}
 
 renderProducts();
 </script>
