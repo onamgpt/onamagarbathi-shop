@@ -270,7 +270,7 @@ function orderViaWhatsApp(){
 
 function getTotal(){
   var t=0;
-  for(var i=0;i<cart.length;i++){t+=(cart[i].price||0)*cart[i].qty;}
+  for(var i=0;i<cart.length;i++){t+=(cart[i].mrp||0)*cart[i].qty;}
   return t;
 }
 
@@ -303,7 +303,7 @@ function addToCart(id){
   if(!p) return;
   var found=false;
   for(var i=0;i<cart.length;i++){if(cart[i].id==id){cart[i].qty++;found=true;break;}}
-  if(!found){cart.push({id:p.id,name:p.name,price:p.price,qty:1});}
+  if(!found){cart.push({id:p.id,name:p.name,mrp:p.mrp,qty:1});}
   updateCartUI();
   showToast("Added: "+safeStr(p.name));
 }
@@ -344,7 +344,7 @@ function renderProducts(){
   for(var i=0;i<list.length;i++){
     var p=list[i];
     var imgSrc=IMGS[p.id]||"";
-    var priceHtml=p.price?"<div class=\"price-sell\">Rs."+p.price+"</div>":"<div class=\"price-tbd\">Price on request</div>";
+    var priceHtml=p.mrp?"<div class=\"price-sell\">Rs."+p.mrp+"</div>":"<div class=\"price-tbd\">Price on request</div>";
     var waMsg="Hi! I want to order: "+p.name+" ("+p.brand+"). Please share price and availability.";
     h+="<div class=\"product-card\">";
     if(p.badge){h+="<div class=\"product-badge\">"+safeStr(p.badge)+"</div>";}
@@ -434,3 +434,4 @@ renderProducts();
 </script>
 </body>
 </html>
+
