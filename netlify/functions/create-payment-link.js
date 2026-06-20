@@ -1,6 +1,14 @@
 // Creates a Razorpay Payment Link for a WhatsApp checkout order.
 // Runs server-side ONLY - this is the one place the Key Secret is used,
 // since it must never be exposed in browser-visible code.
+//
+// Also stores the order's GST line items + customer details in Netlify Blobs,
+// keyed by referenceId, so the payment-webhook function can retrieve them
+// later and log a complete GST order record WITHOUT depending on the
+// customer's browser still being open (Payment Links are paid asynchronously,
+// often well after the customer has closed the tab).
+
+import { getStore } from "@netlify/blobs";
 
 export default async (req) => {
   if (req.method !== "POST") {
@@ -58,6 +66,30 @@ export default async (req) => {
 
     if (!r.ok) {
       return new Response(JSON.stringify({ error: data.error ? data.error.description : "Razorpay error" }), { status: 502 });
+    }
+
+    // Store the order details for the webhook to pick up once payment completes.
+    // This is best-effort: if it fails, the payment link itself is still valid
+    // and usable - we just won't be able to auto-log full GST detail later
+    // (the webhook will fall back to a single generic line item in that case).
+    try {
+      const store = getStore("payment-link-orders");
+      await store.setJSON(referenceId, {
+        referenceId: referenceId,
+        total: body.total,
+        lineItems: body.lineItems || [],
+        customerName: body.customerName || "",
+        customerPhone: body.customerPhone || "",
+        customerAddress: body.customerAddress || "",
+        customerCity: body.customerCity || "",
+        customerPin: body.customerPin || "",
+        customerState: body.customerState || "",
+        customerGstin: body.customerGstin || "",
+        createdAt: new Date().toISOString()
+      });
+    } catch (blobErr) {
+      // never block the payment link from being returned to the customer
+      // over a storage hiccup - logging can degrade gracefully
     }
 
     return new Response(JSON.stringify({
