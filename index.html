@@ -400,7 +400,7 @@ function numberToWordsIndian(num){
   return (rupees===0?"Zero":inWords(rupees)) + " Rupees Only";
 }
 
-function generateInvoiceHtml(orderId, paymentId, lineItems, total){
+function generateInvoiceHtml(invoiceNo, paymentId, lineItems, total){
   var addr = savedAddress || {};
   var invDate = new Date().toLocaleDateString("en-IN", {day:"2-digit", month:"short", year:"numeric"});
   var totalTaxable = lineItems.reduce(function(s,i){return s+i.taxableValue;},0);
@@ -420,7 +420,7 @@ function generateInvoiceHtml(orderId, paymentId, lineItems, total){
     "</tr>";
   }).join("");
 
-  return "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Invoice " + orderId + "</title>" +
+  return "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Invoice " + invoiceNo + "</title>" +
     "<style>" +
     "body{font-family:Arial,sans-serif;padding:30px;color:#1a1208;max-width:800px;margin:0 auto}" +
     "h1{font-size:22px;border-bottom:3px solid #C9A84C;padding-bottom:10px;margin-bottom:4px}" +
@@ -449,7 +449,7 @@ function generateInvoiceHtml(orderId, paymentId, lineItems, total){
         (addr.gstin?"<div>GSTIN: " + addr.gstin + "</div>":"") +
       "</div>" +
       "<div class='box' style='text-align:right'><h3>Invoice Details</h3>" +
-        "<div>Invoice No: " + orderId + "</div>" +
+        "<div>Invoice No: " + invoiceNo + "</div>" +
         "<div>Date: " + invDate + "</div>" +
         "<div>Payment ID: " + paymentId + "</div>" +
         "<div>Place of Supply: " + (addr.state||"Karnataka") + "</div>" +
@@ -467,13 +467,13 @@ function generateInvoiceHtml(orderId, paymentId, lineItems, total){
     "</body></html>";
 }
 
-function openAndPrintInvoice(orderId, paymentId, lineItems, total){
+function openAndPrintInvoice(invoiceNo, paymentId, lineItems, total){
   var win = window.open("", "_blank");
   if(!win){
     showToast("Please allow pop-ups to view your invoice.");
     return;
   }
-  win.document.write(generateInvoiceHtml(orderId, paymentId, lineItems, total));
+  win.document.write(generateInvoiceHtml(invoiceNo, paymentId, lineItems, total));
   win.document.close();
   setTimeout(function(){ win.print(); }, 400);
 }
@@ -483,7 +483,24 @@ function viewPendingInvoice(){
     showToast("Invoice data not available for this session.");
     return;
   }
-  openAndPrintInvoice(pendingInvoice.orderId, pendingInvoice.paymentId, pendingInvoice.lineItems, pendingInvoice.total);
+  if(pendingInvoice.ready){
+    openAndPrintInvoice(pendingInvoice.invoiceNo, pendingInvoice.paymentId, pendingInvoice.lineItems, pendingInvoice.total);
+    return;
+  }
+  // Invoice number still being assigned by the server - wait briefly rather
+  // than show an incorrect/temporary number on a real tax document.
+  showToast("Preparing your invoice number, one moment...");
+  var attempts = 0;
+  var waitForInvoice = setInterval(function(){
+    attempts++;
+    if(pendingInvoice.ready){
+      clearInterval(waitForInvoice);
+      openAndPrintInvoice(pendingInvoice.invoiceNo, pendingInvoice.paymentId, pendingInvoice.lineItems, pendingInvoice.total);
+    } else if(attempts >= 10){
+      clearInterval(waitForInvoice);
+      showToast("Could not assign invoice number right now. Please contact us with your Payment ID for your invoice.");
+    }
+  }, 1000);
 }
 
 // ── GST ORDER LOGGING (for Tally / auditor e-invoice workflow) ────────────────
@@ -511,34 +528,45 @@ function buildGstLineItems(){
   });
 }
 
+// Returns a Promise resolving to the PERMANENT, sequential invoice number
+// assigned by the server (Google Sheet + LockService) - this is the single
+// source of truth, so the printed invoice and the permanent sheet record
+// always agree, and numbers can never collide even under simultaneous payments.
 function logOrderForGst(paymentId, lineItems, total, orderId){
-  try{
-    var totalTaxable = lineItems.reduce(function(s,i){return s+i.taxableValue;},0);
-    var totalGst = lineItems.reduce(function(s,i){return s+i.gstAmount;},0);
-    var payload = {
-      orderId: orderId || ("WEB-" + Date.now()),
-      paymentId: paymentId || "",
-      date: new Date().toISOString(),
-      customerName: savedAddress?savedAddress.name:"",
-      customerPhone: savedAddress?savedAddress.phone:"",
-      customerAddress: savedAddress?savedAddress.line:"",
-      customerCity: savedAddress?savedAddress.city:"",
-      customerPin: savedAddress?savedAddress.pin:"",
-      customerState: savedAddress?savedAddress.state:"",
-      customerGstin: savedAddress?savedAddress.gstin:"",
-      items: lineItems,
-      totalTaxableValue: Math.round(totalTaxable*100)/100,
-      totalGst: Math.round(totalGst*100)/100,
-      grandTotal: total
-    };
-    fetch("/.netlify/functions/order-log",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify(payload)
-    }).catch(function(){}); // never block checkout if logging fails
-  }catch(e){
-    // never block checkout success over a logging error
-  }
+  var totalTaxable = lineItems.reduce(function(s,i){return s+i.taxableValue;},0);
+  var totalGst = lineItems.reduce(function(s,i){return s+i.gstAmount;},0);
+  var payload = {
+    orderId: orderId || ("WEB-" + Date.now()),
+    paymentId: paymentId || "",
+    date: new Date().toISOString(),
+    customerName: savedAddress?savedAddress.name:"",
+    customerPhone: savedAddress?savedAddress.phone:"",
+    customerAddress: savedAddress?savedAddress.line:"",
+    customerCity: savedAddress?savedAddress.city:"",
+    customerPin: savedAddress?savedAddress.pin:"",
+    customerState: savedAddress?savedAddress.state:"",
+    customerGstin: savedAddress?savedAddress.gstin:"",
+    items: lineItems,
+    totalTaxableValue: Math.round(totalTaxable*100)/100,
+    totalGst: Math.round(totalGst*100)/100,
+    grandTotal: total
+  };
+  return fetch("/.netlify/functions/order-log",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)
+  }).then(function(r){return r.json();})
+    .then(function(r){
+      if(r && r.invoiceNo) return r.invoiceNo;
+      throw new Error("No invoice number returned");
+    })
+    .catch(function(){
+      // Fallback ONLY if the permanent log could not be reached (network issue etc).
+      // Clearly marked as provisional so it is never mistaken for the real
+      // sequential number - payment and order data are still safe either way
+      // since payment succeeded with Razorpay regardless of this logging step.
+      return "PROVISIONAL-" + (paymentId || Date.now()) + " (verify with Onam Agarbathi)";
+    });
 }
 
 // ── PAYMENT SUCCESS PANEL (reliable WhatsApp redirect for mobile Safari) ──────
@@ -703,8 +731,16 @@ function doStartRazorpay(){
     handler: function(response){
       var gstLineItems = buildGstLineItems();
       var thisOrderId = "WEB-" + Date.now();
-      logOrderForGst(response.razorpay_payment_id, gstLineItems, total, thisOrderId);
-      pendingInvoice = {orderId: thisOrderId, paymentId: response.razorpay_payment_id, lineItems: gstLineItems, total: total};
+      // Payment already succeeded with Razorpay at this point - that is the
+      // part that matters most. Show success immediately; the permanent
+      // invoice number is fetched in the background and the "View Invoice"
+      // button will wait for it before opening, so the customer is never
+      // shown a non-compliant or mismatched invoice number.
+      pendingInvoice = {orderId: thisOrderId, paymentId: response.razorpay_payment_id, lineItems: gstLineItems, total: total, invoiceNo: null, ready: false};
+      logOrderForGst(response.razorpay_payment_id, gstLineItems, total, thisOrderId).then(function(invoiceNo){
+        pendingInvoice.invoiceNo = invoiceNo;
+        pendingInvoice.ready = true;
+      });
       pendingWaMessage = "Hi! I have completed payment for my order.%0A%0APayment ID: " + response.razorpay_payment_id + "%0A%0AItems: " + itemList + "%0A%0ATotal: Rs." + total + "%0A%0A" + formatAddressForMessage(false) + "%0A%0APlease confirm dispatch. Thank you!";
       cart = [];
       updateCartUI();
