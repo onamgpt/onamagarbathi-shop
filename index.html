@@ -483,9 +483,20 @@ function openAndPrintInvoice(invoiceNo, paymentId, lineItems, total){
     showToast("Please allow pop-ups to view your invoice.");
     return;
   }
-  win.document.write(generateInvoiceHtml(invoiceNo, paymentId, lineItems, total));
-  win.document.close();
-  setTimeout(function(){ win.print(); }, 400);
+  try{
+    if(!Array.isArray(lineItems) || lineItems.length===0){
+      throw new Error("No line items available for this invoice");
+    }
+    win.document.write(generateInvoiceHtml(invoiceNo, paymentId, lineItems, total));
+    win.document.close();
+    setTimeout(function(){ win.print(); }, 400);
+  }catch(e){
+    // Never leave the new tab blank with no explanation - show a clear
+    // message in that same tab, and let the user know in the main page too.
+    win.document.write("<body style='font-family:Arial;padding:40px;text-align:center;color:#555'><h2>Could not generate invoice</h2><p>Please contact Onam Agarbathi with your Payment ID: "+(paymentId||"N/A")+"</p></body>");
+    win.document.close();
+    showToast("Could not generate invoice. Please contact us with your Payment ID.");
+  }
 }
 
 function viewPendingInvoice(){
@@ -493,24 +504,65 @@ function viewPendingInvoice(){
     showToast("Invoice data not available for this session.");
     return;
   }
-  if(pendingInvoice.ready){
-    openAndPrintInvoice(pendingInvoice.invoiceNo, pendingInvoice.paymentId, pendingInvoice.lineItems, pendingInvoice.total);
+
+  // Open the tab IMMEDIATELY, synchronously, as a direct result of this tap -
+  // this is required for iPhone Safari to allow window.open at all. Opening
+  // it later from inside a setInterval/setTimeout callback (as the previous
+  // version did) is no longer considered a direct user gesture and Safari
+  // can silently neuter it, leaving a blank tab with nothing ever written
+  // into it. We write a "preparing" placeholder now, then fill in the real
+  // invoice into this SAME window once the number is ready.
+  var win = window.open("", "_blank");
+  if(!win){
+    showToast("Please allow pop-ups to view your invoice.");
     return;
   }
-  // Invoice number still being assigned by the server - wait briefly rather
-  // than show an incorrect/temporary number on a real tax document.
-  showToast("Preparing your invoice number, one moment...");
+  win.document.write("<body style='font-family:Arial;padding:40px;text-align:center;color:#555'><h2>Preparing your invoice...</h2><p>One moment please.</p></body>");
+  win.document.close();
+
+  if(pendingInvoice.ready){
+    writeInvoiceIntoWindow(win, pendingInvoice.invoiceNo, pendingInvoice.paymentId, pendingInvoice.lineItems, pendingInvoice.total);
+    return;
+  }
+
   var attempts = 0;
   var waitForInvoice = setInterval(function(){
     attempts++;
     if(pendingInvoice.ready){
       clearInterval(waitForInvoice);
-      openAndPrintInvoice(pendingInvoice.invoiceNo, pendingInvoice.paymentId, pendingInvoice.lineItems, pendingInvoice.total);
+      writeInvoiceIntoWindow(win, pendingInvoice.invoiceNo, pendingInvoice.paymentId, pendingInvoice.lineItems, pendingInvoice.total);
     } else if(attempts >= 10){
       clearInterval(waitForInvoice);
-      showToast("Could not assign invoice number right now. Please contact us with your Payment ID for your invoice.");
+      try{
+        win.document.write("<body style='font-family:Arial;padding:40px;text-align:center;color:#555'><h2>Could not assign invoice number</h2><p>Please contact Onam Agarbathi with your Payment ID: "+(pendingInvoice.paymentId||"N/A")+"</p></body>");
+        win.document.close();
+      }catch(e){}
+      showToast("Could not assign invoice number right now. Please contact us with your Payment ID.");
     }
   }, 1000);
+}
+
+// Writes the real invoice content into an ALREADY-OPEN window (opened
+// synchronously from the user's tap in viewPendingInvoice), rather than
+// trying to open a new window later - reused by openAndPrintInvoice's
+// other direct-tap call sites too.
+function writeInvoiceIntoWindow(win, invoiceNo, paymentId, lineItems, total){
+  try{
+    if(!Array.isArray(lineItems) || lineItems.length===0){
+      throw new Error("No line items available for this invoice");
+    }
+    win.document.open();
+    win.document.write(generateInvoiceHtml(invoiceNo, paymentId, lineItems, total));
+    win.document.close();
+    setTimeout(function(){ win.print(); }, 400);
+  }catch(e){
+    try{
+      win.document.open();
+      win.document.write("<body style='font-family:Arial;padding:40px;text-align:center;color:#555'><h2>Could not generate invoice</h2><p>Please contact Onam Agarbathi with your Payment ID: "+(paymentId||"N/A")+"</p></body>");
+      win.document.close();
+    }catch(e2){}
+    showToast("Could not generate invoice. Please contact us with your Payment ID.");
+  }
 }
 
 // ── PROFORMA GENERATION (WhatsApp checkout, pre-payment) ──────────────────────
