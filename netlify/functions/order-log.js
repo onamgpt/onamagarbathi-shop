@@ -9,7 +9,7 @@ export default async (req) => {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
   }
 
-  const SCRIPT_URL = process.env.ORDER_LOG_SCRIPT_URL;
+  const SCRIPT_URL = Netlify.env.get("ORDER_LOG_SCRIPT_URL");
   if (!SCRIPT_URL) {
     return new Response(JSON.stringify({ error: "ORDER_LOG_SCRIPT_URL not configured" }), { status: 500 });
   }
