@@ -692,6 +692,8 @@ function doOrderViaWhatsApp(){
   document.getElementById("waPrepOverlay").classList.add("open");
   document.getElementById("waPrepModal").classList.add("open");
 
+  var gstLineItemsSnapshot = buildGstLineItems();
+
   fetch("/.netlify/functions/create-payment-link",{
     method:"POST",
     headers:{"Content-Type":"application/json"},
@@ -700,7 +702,13 @@ function doOrderViaWhatsApp(){
       itemsDescription: itemsDescription,
       referenceId: referenceId,
       customerName: savedAddress?savedAddress.name:"",
-      customerPhone: savedAddress?savedAddress.phone:""
+      customerPhone: savedAddress?savedAddress.phone:"",
+      customerAddress: savedAddress?savedAddress.line:"",
+      customerCity: savedAddress?savedAddress.city:"",
+      customerPin: savedAddress?savedAddress.pin:"",
+      customerState: savedAddress?savedAddress.state:"",
+      customerGstin: savedAddress?savedAddress.gstin:"",
+      lineItems: gstLineItemsSnapshot
     })
   }).then(function(r){return r.json();})
     .then(function(r){
