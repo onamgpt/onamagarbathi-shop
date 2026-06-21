@@ -66,6 +66,8 @@ nav{position:fixed;top:0;left:0;right:0;z-index:1000;height:var(--nav-h);backgro
 .product-grid{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:20px}
 .product-card{background:white;border:1px solid var(--ash);transition:all 0.3s;position:relative;overflow:hidden;display:flex;flex-direction:column}
 .product-card:hover{transform:translateY(-4px);box-shadow:0 20px 50px rgba(26,18,8,0.1);border-color:var(--gold)}
+.product-card.deeplink-highlight{animation:deeplinkPulse 1.8s ease-in-out 2}
+@keyframes deeplinkPulse{0%,100%{box-shadow:0 0 0 0 rgba(201,168,76,0.6)}50%{box-shadow:0 0 0 10px rgba(201,168,76,0)}}
 .product-badge{position:absolute;top:12px;left:12px;z-index:2;background:var(--ember);color:white;font-size:0.58rem;font-family:'Cinzel',serif;letter-spacing:0.1em;padding:4px 10px;text-transform:uppercase}
 .product-img-wrap{height:200px;overflow:hidden;background:#f0ece4;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .product-img-wrap img{width:100%;height:100%;object-fit:cover;transition:transform 0.4s;display:block}
@@ -869,7 +871,7 @@ function renderProducts(){
     var imgSrc=IMGS[p.id]||"";
     var priceHtml=p.mrp?"<div class=\"price-sell\">Rs."+p.mrp+"</div>":"<div class=\"price-tbd\">Price on request</div>";
     var waMsg="Hi! I want to order: "+p.name+" ("+p.brand+"). Please share price and availability.";
-    h+="<div class=\"product-card\">";
+    h+="<div class=\"product-card\" data-product-id=\""+p.id+"\">";
     if(p.badge){h+="<div class=\"product-badge\">"+safeStr(p.badge)+"</div>";}
     h+="<div class=\"product-img-wrap\">";
     if(imgSrc){h+="<img src=\""+imgSrc+"\" alt=\""+safeStr(p.name)+"\" loading=\"lazy\">";}
@@ -978,6 +980,61 @@ function doStartRazorpay(){
 }
 
 renderProducts();
+
+// ── DEEP LINKING (?product=product-id) ─────────────────────────────────────────
+// Lets ads/Instagram links point directly at one specific product instead of
+// just the homepage - switches to the right category tab if needed, scrolls
+// the product into view, and briefly highlights it so it's obvious which
+// item the link was about. Falls back to a toast if the product ID in the
+// URL doesn't match anything (e.g. a typo or a discontinued product).
+function handleProductDeepLink(){
+  try{
+    var params = new URLSearchParams(window.location.search);
+    var targetId = params.get("product");
+    if(!targetId) return;
+
+    var target = null;
+    for(var i=0;i<PRODUCTS.length;i++){
+      if(PRODUCTS[i].id === targetId){ target = PRODUCTS[i]; break; }
+    }
+    if(!target){
+      showToast("That product link looks outdated. Browse our full range below.");
+      return;
+    }
+
+    // Switch to the product's category tab if it's not already showing,
+    // so the card actually exists in the rendered grid to scroll to.
+    // Category tabs don't carry a data-cat attribute - their category is
+    // embedded in their onclick="filterCat(this,'premium')" string instead,
+    // so we match against that directly and call filterCat() the same way
+    // the button's own onclick would, rather than simulating a click.
+    if(currentCat !== "all" && currentCat !== target.cat){
+      var tabs = document.querySelectorAll(".cat-tab");
+      for(var j=0;j<tabs.length;j++){
+        var onclickAttr = tabs[j].getAttribute("onclick") || "";
+        if(onclickAttr.indexOf("'"+target.cat+"'") !== -1){
+          filterCat(tabs[j], target.cat);
+          break;
+        }
+      }
+    }
+
+    // Give the DOM a moment to finish re-rendering after the tab switch
+    // before trying to scroll to and highlight the card.
+    setTimeout(function(){
+      var card = document.querySelector('[data-product-id="'+targetId+'"]');
+      if(card){
+        card.scrollIntoView({behavior:"smooth", block:"center"});
+        card.classList.add("deeplink-highlight");
+        setTimeout(function(){ card.classList.remove("deeplink-highlight"); }, 3800);
+      }
+    }, 250);
+
+  }catch(e){
+    // Never let a deep-link parsing issue break the rest of the page.
+  }
+}
+handleProductDeepLink();
 </script>
 </body>
 </html>
