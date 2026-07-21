@@ -981,17 +981,15 @@ function doStartRazorpay(){
         // Show the real, shareable invoice link directly in the success
         // panel as soon as it's ready, so it can be copied/shared even
         // without tapping the "View Invoice" button.
-        try{
-          var linkUrl = window.location.origin + "/invoice/" + encodeURIComponent(invoiceNo);
-          var linkEl = document.getElementById("psuccessInvLinkA");
-          if(linkEl){
-            linkEl.href = linkUrl;
-            linkEl.textContent = linkUrl;
-            document.getElementById("psuccessInvLink").style.display = "block";
-          }
-        }catch(e){}
+        /* invoice link handled in-browser by viewPendingInvoice(); nothing to do here */
       });
-      pendingWaMessage = "Hi! I have completed payment for my order.%0A%0APayment ID: " + response.razorpay_payment_id + "%0A%0AItems: " + itemList + "%0A%0ATotal: Rs." + total + "%0A%0A" + formatAddressForMessage(false) + "%0A%0APlease confirm dispatch. Thank you!";
+      (function(){
+        var _li = (typeof buildGstLineItems==="function") ? buildGstLineItems() : [];
+        var _taxable=0,_gst=0;
+        _li.forEach(function(x){_taxable+=(x.taxableValue||0);_gst+=(x.gstAmount||0);});
+        var _taxLine = _li.length ? ("%0ATaxable: Rs." + _taxable.toFixed(2) + "%0AGST: Rs." + _gst.toFixed(2)) : "";
+        pendingWaMessage = "Hi! I have completed payment for my order.%0A%0APayment ID: " + response.razorpay_payment_id + "%0A%0AItems: " + itemList + _taxLine + "%0A%0ATotal (incl. GST): Rs." + total + "%0A%0A" + formatAddressForMessage(false) + "%0A%0APlease confirm dispatch. Thank you!";
+      })();
       cart = [];
       updateCartUI();
       toggleCart();
