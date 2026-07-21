@@ -582,7 +582,7 @@ function renderGstInvoiceHTML(inv){
    + "<div class='r'><div><b>Bill To:</b><br>"+(addr.name||"Customer")+"<br>"+(addr.line||"")+" "+(addr.city||"")+"<br>"+(addr.state||"")+" "+(addr.pincode||"")+"<br>"+(addr.phone||"")+"</div></div>"
    + "<table><thead><tr><th>#</th><th>Description</th><th>HSN</th><th>Qty</th><th>Rate</th><th>Taxable</th>"+taxHead+"<th>Total</th></tr></thead><tbody>"+rows+"</tbody>"
    + "<tfoot><tr><td colspan='5' class='tot'>Total</td><td>Rs "+totTaxable.toFixed(2)+"</td><td colspan='"+(interState?2:4)+"'>Rs "+totTax.toFixed(2)+"</td><td>Rs "+grand.toFixed(2)+"</td></tr></tfoot></table>"
-   + "<div class='words'>Amount in words: "+words+" Rupees Only</div>"
+   + "<div class='words'>Amount in words: "+words+"</div>"
    + "<div class='ft'>This is a computer-generated invoice. "+C.name+" &nbsp;|&nbsp; GSTIN "+C.gstin+"<br>Thank you for your order.</div>"
    + "<div class='noprint' style='text-align:center;margin-top:14px'><button onclick='window.print()' style='padding:10px 22px;font-size:14px;background:#1a1208;color:#fff;border:none;border-radius:6px;cursor:pointer'>Download / Print PDF</button></div>"
    + "</div></body></html>";
@@ -974,7 +974,7 @@ function doStartRazorpay(){
       // invoice number is fetched in the background and the "View Invoice"
       // button will wait for it before opening, so the customer is never
       // shown a non-compliant or mismatched invoice number.
-      pendingInvoice = {orderId: thisOrderId, paymentId: response.razorpay_payment_id, lineItems: gstLineItems, total: total, invoiceNo: null, ready: false};
+      pendingInvoice = {orderId: thisOrderId, paymentId: response.razorpay_payment_id, lineItems: gstLineItems, total: total, invoiceNo: null, ready: false, customer: (savedAddress ? {name: savedAddress.name, phone: savedAddress.phone, line: savedAddress.line, city: savedAddress.city, pincode: savedAddress.pin, state: savedAddress.state, gstin: savedAddress.gstin} : {})};
       logOrderForGst(response.razorpay_payment_id, gstLineItems, total, thisOrderId).then(function(invoiceNo){
         pendingInvoice.invoiceNo = invoiceNo;
         pendingInvoice.ready = true;
