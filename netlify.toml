@@ -1,22 +1,14 @@
-[functions]
-  directory = "netlify/functions"
+# Netlify configuration — Onam Agarbathi shop
 
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+[build]
+  publish = "."
+  functions = "netlify/functions"
 
+# SPA / single-page fallback: serve index.html for any unmatched route.
+# NOTE: never write a redirect whose `from` starts with /.netlify — that path
+# is reserved by Netlify and causes "Invalid /.netlify path in redirect source".
+# Functions are reachable at /.netlify/functions/<name> automatically; no rule needed.
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
-
-[[headers]]
-  for = "/index.html"
-  [headers.values]
-    Cache-Control = "no-cache, no-store, must-revalidate"
-
-[[headers]]
-  for = "/"
-  [headers.values]
-    Cache-Control = "no-cache, no-store, must-revalidate"
