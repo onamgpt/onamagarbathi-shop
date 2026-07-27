@@ -1,0 +1,9 @@
+{
+  "name": "onamagarbathi-shop",
+  "version": "1.0.0",
+  "description": "Onam Agarbathi e-commerce shop",
+  "dependencies": {
+    "pdfkit": "^0.13.0",
+    "qrcode": "^1.5.3"
+  }
+}
