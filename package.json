@@ -4,7 +4,6 @@
   "description": "Onam Agarbathi e-commerce shop",
   "dependencies": {
     "pdfkit": "^0.13.0",
-    "qrcode": "^1.5.3",
-    "@supabase/supabase-js": "^2.38.0"
+    "qrcode": "^1.5.3"
   }
 }

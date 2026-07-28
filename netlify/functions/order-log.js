@@ -1,224 +1,161 @@
-/**
- * Order Log — Netlify Function
- * Receives order from shop checkout, saves to Supabase, calls Apps Script for email/Telegram
- * 
- * Expects POST body:
- * {
- *   orderId, customerName, customerPhone, customerAddress, customerCity, customerPin,
- *   customerState, customerGstin, totalTaxableValue, totalGst, grandTotal, paymentId,
- *   items: [ { name, packSize, hsn, qty, unitPrice, taxableValue, gstAmount, gstRate, lineTotal } ]
- * }
- * 
- * Returns: { ok: true, invoiceNo: "ONAMonline/2026-27/0001", orderId: "WEB-..." }
- */
+// Netlify Function: records each paid order.
+//
+// DESIGN RULE: the order must never be lost because a database is having a bad
+// day. So the proven path (Apps Script -> invoice number + email + Telegram +
+// packing slip) runs FIRST and owns the response. Supabase is then written as a
+// best-effort side effect. If Supabase fails, the customer still gets a real
+// invoice number and you still get notified — we just log the miss.
+//
+// Uses plain fetch against the Supabase REST API, so there is no npm dependency
+// and no CommonJS/ESM mismatch with the other functions in this folder.
 
-const { createClient } = require('@supabase/supabase-js');
-
-exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: JSON.stringify({ error: 'POST only' }) };
+export default async (req) => {
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
   }
 
+  const SCRIPT_URL = Netlify.env.get("ORDER_LOG_SCRIPT_URL");
+  if (!SCRIPT_URL) {
+    return new Response(JSON.stringify({ error: "ORDER_LOG_SCRIPT_URL not configured" }), { status: 500 });
+  }
+
+  let body;
   try {
-    const data = JSON.parse(event.body);
-    const orderId = data.orderId || ("WEB-" + Date.now());
+    body = await req.json();
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "invalid JSON" }), { status: 400 });
+  }
 
-    // Initialize Supabase
-    const supabaseUrl = process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
+  // ---------------------------------------------------------------- STEP 1
+  // The path that is known to work. This decides the invoice number.
+  let result;
+  try {
+    const r = await fetch(SCRIPT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const text = await r.text();
+    try { result = JSON.parse(text); } catch (e) { result = { raw: text }; }
+  } catch (e) {
+    return new Response(JSON.stringify({ error: "order log failed: " + e.message }), { status: 500 });
+  }
 
-    if (!supabaseUrl || !supabaseKey) {
-      return {
-        statusCode: 500,
-        body: JSON.stringify({ error: 'Supabase not configured' })
+  const invoiceNo = result && result.invoiceNo ? result.invoiceNo : null;
+
+  // ---------------------------------------------------------------- STEP 2
+  // Best-effort mirror into Supabase. Wrapped so nothing here can throw out.
+  let supabaseStatus = "skipped";
+  try {
+    const SB_URL = Netlify.env.get("SUPABASE_URL");
+    const SB_KEY = Netlify.env.get("SUPABASE_SERVICE_KEY");
+
+    if (SB_URL && SB_KEY && invoiceNo) {
+      const H = {
+        "apikey": SB_KEY,
+        "Authorization": "Bearer " + SB_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates"
       };
-    }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+      const nowIso = new Date().toISOString();
+      const num = (v) => { const x = parseFloat(v); return isNaN(x) ? 0 : x; };
 
-    // Check if order already exists (idempotency)
-    const { data: existing, error: checkErr } = await supabase
-      .from('orders')
-      .select('id')
-      .eq('order_id', orderId)
-      .limit(1);
+      const state = String(body.customerState || "").trim().toUpperCase();
+      const inter = state && state !== "KARNATAKA";
+      const totalGst = num(body.totalGst);
+      const items = Array.isArray(body.items) ? body.items : [];
 
-    if (checkErr) throw checkErr;
-
-    if (existing && existing.length > 0) {
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          ok: true,
-          invoiceNo: existing[0].id,
-          orderId: orderId,
-          duplicate: true
-        })
-      };
-    }
-
-    // Generate invoice number (increment counter from kv table)
-    const { data: kvData, error: kvErr } = await supabase
-      .from('kv')
-      .select('v')
-      .eq('owner', 'orders')
-      .eq('k', 'invoice_seq')
-      .limit(1);
-
-    if (kvErr) throw kvErr;
-
-    let seq = 0;
-    if (kvData && kvData.length > 0 && kvData[0].v) {
-      seq = (kvData[0].v.seq || 0) + 1;
-    } else {
-      seq = 1;
-    }
-
-    // Update sequence
-    await supabase
-      .from('kv')
-      .upsert({ owner: 'orders', k: 'invoice_seq', v: { seq: seq } }, { onConflict: 'owner,k' });
-
-    const invoiceNo = 'ONAMonline/2026-27/' + String(seq).padStart(4, '0');
-
-    // Normalize customer data
-    const cust = {
-      name: data.customerName || data.name || '',
-      phone: data.customerPhone || data.phone || '',
-      address: data.customerAddress || data.address || '',
-      city: data.customerCity || data.city || '',
-      pin: data.customerPin || data.pin || '',
-      state: data.customerState || data.state || '',
-      gstin: data.customerGstin || data.gstin || ''
-    };
-
-    const items = Array.isArray(data.items) ? data.items : [];
-    const dateStr = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
-
-    // Parse amounts
-    const taxable = parseFloat(data.totalTaxableValue || data.taxable || 0);
-    const totalGst = parseFloat(data.totalGst || data.gst || 0);
-    const grand = parseFloat(data.grandTotal || data.total || 0);
-
-    // Determine tax type
-    const isInterState = cust.state && String(cust.state).trim().toUpperCase() !== 'KARNATAKA';
-    const cgst = isInterState ? 0 : Math.round(totalGst / 2 * 100) / 100;
-    const sgst = isInterState ? 0 : Math.round(totalGst / 2 * 100) / 100;
-    const igst = isInterState ? totalGst : 0;
-    const taxType = isInterState ? 'IGST' : 'CGST+SGST';
-
-    // Build items summary
-    const itemsSummary = items.length
-      ? items.map(i => (i.name || '?') + ' x' + (i.qty || 1)).join(' | ')
-      : (data.description || '');
-
-    // Save to orders table
-    const { error: insertErr } = await supabase
-      .from('orders')
-      .insert([{
+      const orderRow = {
         id: invoiceNo,
-        order_id: orderId,
-        created_at: dateStr,
-        payment_id: data.paymentId || '',
-        customer_name: cust.name,
-        customer_phone: cust.phone,
-        customer_address: cust.address,
-        customer_city: cust.city,
-        customer_pin: cust.pin,
-        customer_state: cust.state,
-        customer_gstin: cust.gstin,
-        taxable_value: taxable,
-        cgst: cgst,
-        sgst: sgst,
-        igst: igst,
+        order_id: body.orderId || "",
+        created_at: new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }),
+        created_log_ts: nowIso,
+        payment_id: body.paymentId || "",
+        customer_name: body.customerName || "",
+        customer_phone: body.customerPhone || "",
+        customer_address: body.customerAddress || "",
+        customer_city: body.customerCity || "",
+        customer_pin: body.customerPin || "",
+        customer_state: body.customerState || "",
+        customer_gstin: body.customerGstin || "",
+        taxable_value: num(body.totalTaxableValue),
+        cgst: inter ? 0 : Math.round(totalGst / 2 * 100) / 100,
+        sgst: inter ? 0 : Math.round(totalGst / 2 * 100) / 100,
+        igst: inter ? totalGst : 0,
         total_gst: totalGst,
-        grand_total: grand,
-        tax_type: taxType,
-        status: 'Pending',
-        items_summary: itemsSummary,
-        created_log_ts: new Date().toISOString()
-      }]);
+        grand_total: num(body.grandTotal),
+        tax_type: inter ? "IGST" : "CGST+SGST",
+        status: "Pending",
+        items_summary: items.length
+          ? items.map((i) => (i.name || "?") + " x" + (i.qty || 1)).join(" | ")
+          : ""
+      };
 
-    if (insertErr) throw insertErr;
-
-    // Save line items
-    if (items.length) {
-      const lineRows = items.map((item, idx) => {
-        const gstAmt = parseFloat(item.gstAmount || 0);
-        return {
-          id: invoiceNo + '_line_' + (idx + 1),
-          invoice_no: invoiceNo,
-          order_id: orderId,
-          created_at: dateStr,
-          item_name: item.name || '',
-          pack_size: item.packSize || '',
-          hsn: item.hsn || '33074100',
-          qty: parseFloat(item.qty || 0),
-          unit_price: parseFloat(item.unitPrice || 0),
-          taxable_value: parseFloat(item.taxableValue || 0),
-          customer_state: cust.state,
-          gst_rate: parseFloat(item.gstRate || 0),
-          cgst: isInterState ? 0 : Math.round(gstAmt / 2 * 100) / 100,
-          sgst: isInterState ? 0 : Math.round(gstAmt / 2 * 100) / 100,
-          igst: isInterState ? gstAmt : 0,
-          gst_amount: gstAmt,
-          line_total: parseFloat(item.lineTotal || 0)
-        };
+      const oRes = await fetch(SB_URL + "/rest/v1/orders", {
+        method: "POST",
+        headers: H,
+        body: JSON.stringify([orderRow])
       });
 
-      const { error: lineErr } = await supabase
-        .from('order_lines')
-        .insert(lineRows);
+      if (!oRes.ok) {
+        supabaseStatus = "order insert failed: " + oRes.status + " " + (await oRes.text()).slice(0, 200);
+      } else {
+        supabaseStatus = "order saved";
 
-      if (lineErr) throw lineErr;
+        if (items.length) {
+          const lineRows = items.map((it, idx) => {
+            const gstAmt = num(it.gstAmount);
+            return {
+              id: invoiceNo + "_line_" + (idx + 1),
+              invoice_no: invoiceNo,
+              order_id: body.orderId || "",
+              created_at: orderRow.created_at,
+              item_name: it.name || "",
+              pack_size: it.packSize || "",
+              hsn: it.hsn || "33074100",
+              qty: num(it.qty),
+              unit_price: num(it.unitPrice),
+              taxable_value: num(it.taxableValue),
+              customer_state: body.customerState || "",
+              gst_rate: num(it.gstRate),
+              cgst: inter ? 0 : Math.round(gstAmt / 2 * 100) / 100,
+              sgst: inter ? 0 : Math.round(gstAmt / 2 * 100) / 100,
+              igst: inter ? gstAmt : 0,
+              gst_amount: gstAmt,
+              line_total: num(it.lineTotal)
+            };
+          });
+
+          const lRes = await fetch(SB_URL + "/rest/v1/order_lines", {
+            method: "POST",
+            headers: H,
+            body: JSON.stringify(lineRows)
+          });
+
+          supabaseStatus = lRes.ok
+            ? "order + " + lineRows.length + " lines saved"
+            : "lines failed: " + lRes.status + " " + (await lRes.text()).slice(0, 200);
+        }
+      }
+    } else if (!invoiceNo) {
+      supabaseStatus = "no invoiceNo from Apps Script, not mirrored";
+    } else {
+      supabaseStatus = "SUPABASE_URL or SUPABASE_SERVICE_KEY missing";
     }
-
-    // Call Apps Script for email + Telegram (non-blocking)
-    const scriptUrl = process.env.ORDER_LOG_SCRIPT_URL;
-    if (scriptUrl) {
-      fetch(scriptUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'newOrder',
-          invoiceNo: invoiceNo,
-          orderId: orderId,
-          customerName: cust.name,
-          customerPhone: cust.phone,
-          customerAddress: cust.address,
-          customerCity: cust.city,
-          customerPin: cust.pin,
-          customerState: cust.state,
-          customerGstin: cust.gstin,
-          totalTaxableValue: taxable,
-          totalGst: totalGst,
-          grandTotal: grand,
-          paymentId: data.paymentId || '',
-          items: items,
-          date: dateStr
-        })
-      }).catch(err => console.log('Apps Script call failed:', err));
-    }
-
-    return {
-      statusCode: 200,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ok: true,
-        invoiceNo: invoiceNo,
-        orderId: orderId
-      })
-    };
-
-  } catch (error) {
-    console.error('Error:', error);
-    return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ok: false,
-        error: String(error)
-      })
-    };
+  } catch (e) {
+    supabaseStatus = "exception: " + (e && e.message ? e.message : String(e));
   }
+
+  console.log("SUPABASE MIRROR:", invoiceNo, "->", supabaseStatus);
+
+  // Return exactly what the shop expects, plus a diagnostic field.
+  return new Response(
+    JSON.stringify(Object.assign({}, result, { supabase: supabaseStatus })),
+    { status: 200, headers: { "Content-Type": "application/json" } }
+  );
+};
+
+export const config = {
+  path: "/.netlify/functions/order-log"
 };
