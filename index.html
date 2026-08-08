@@ -562,6 +562,30 @@ function saveOrderToSheet(inv){
       headers:{"Content-Type":"text/plain;charset=utf-8"},
       body: JSON.stringify(payload)
     }).catch(function(){});
+
+    // Telegram notification, sent from our own function so the destination
+    // group is controlled by an environment variable rather than being
+    // hardcoded inside an Apps Script deployment.
+    fetch("/.netlify/functions/notify-order", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({
+        orderNo: inv.invoiceNo||inv.orderId||"",
+        date: (function(){ var d=new Date();
+          return ("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear(); })(),
+        time: (function(){ var d=new Date();
+          return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); })(),
+        total: inv.total||0,
+        paymentId: inv.paymentId||"",
+        items: (inv.lineItems||[]).map(function(it){
+          return { name: it.name||"", size: it.packSize||"", qty: it.qty||1 };
+        }),
+        customer: {
+          name: c.name||"", phone: c.phone||"", address: c.line||"",
+          city: c.city||"", state: c.state||"", pincode: c.pincode||""
+        }
+      })
+    }).catch(function(){});
   }catch(e){}
 }
 
