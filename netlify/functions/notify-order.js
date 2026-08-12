@@ -47,6 +47,12 @@ export default async (req) => {
   const stamp = [body.date, body.time].filter(Boolean).join("  ");
   lines.push([stamp, body.total != null ? inr(body.total) : null].filter(Boolean).join("  |  "));
   if (body.paymentId) lines.push("Payment: " + body.paymentId);
+  // Where this order came from. The single most useful line on this message
+  // once sampling starts, because it says whether the boxes are working.
+  if (body.source) {
+    lines.push("Came from: " + body.source +
+      (body.campaign ? (" / " + body.campaign) : ""));
+  }
 
   if (items.length) {
     lines.push("");
