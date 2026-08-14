@@ -42,6 +42,7 @@ export default async (req) => {
 
   const lines = [];
   lines.push("NEW ORDER - PAID");
+  lines.push("[site]");
   lines.push("");
   if (body.orderNo) lines.push(body.orderNo);
   const stamp = [body.date, body.time].filter(Boolean).join("  ");
@@ -54,14 +55,19 @@ export default async (req) => {
       (body.campaign ? (" / " + body.campaign) : ""));
   }
 
+  lines.push("");
   if (items.length) {
-    lines.push("");
     lines.push("PACK:");
     items.forEach((it, i) => {
       const size = it.size ? " (" + it.size + ")" : "";
       const qty = it.qty != null ? "  x " + it.qty : "";
-      lines.push("  " + (i + 1) + ". " + (it.name || "item") + size + qty);
+      lines.push("  " + (i + 1) + ". " + (it.name || "unnamed item") + size + qty);
     });
+  } else {
+    // Never send a silent order. If the items did not arrive, say so —
+    // otherwise the message looks complete and the packer has nothing to pack.
+    lines.push("PACK: NOT RECEIVED — open the invoice for the items");
+    lines.push("  (the checkout sent no line items with this order)");
   }
 
   const addr = [
