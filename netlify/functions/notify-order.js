@@ -33,8 +33,18 @@ export default async (req) => {
     }), { status: 200, headers: cors });
   }
 
+  // Read as text first, then parse. req.json() throwing leaves an empty object
+  // behind and the message goes out with nothing but a header — which is what
+  // happened. Reading the raw text lets us see whether the body arrived at all.
   let body = {};
-  try { body = await req.json(); } catch (e) {}
+  let raw = "";
+  let parseError = null;
+  try {
+    raw = await req.text();
+    if (raw) body = JSON.parse(raw);
+  } catch (e) {
+    parseError = String(e && e.message ? e.message : e);
+  }
 
   const inr = (n) => "Rs." + Number(n || 0).toLocaleString("en-IN");
   const items = Array.isArray(body.items) ? body.items : [];
@@ -42,7 +52,29 @@ export default async (req) => {
 
   const lines = [];
   lines.push("NEW ORDER - PAID");
-  lines.push("[site]");
+
+  // An order with no usable data is a fault, not a notification. Say so, and
+  // carry enough detail to find the cause rather than sending a bare heading.
+  const gotAnything = body && (body.orderNo || body.paymentId || body.total ||
+    (Array.isArray(body.items) && body.items.length));
+  if (!gotAnything) {
+    lines.push("⚠ the order details did not reach this message");
+    lines.push("");
+    lines.push("bytes received: " + (raw ? raw.length : 0));
+    if (parseError) lines.push("could not read it: " + parseError);
+    else if (raw) lines.push("first part: " + raw.slice(0, 180));
+    lines.push("");
+    lines.push("The payment went through. Open Razorpay or the order sheet");
+    lines.push("for the items and the address.");
+    const r0 = await fetch("https://api.telegram.org/bot" + BOT_TOKEN + "/sendMessage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: String(CHAT_ID), text: lines.join("\n") })
+    });
+    const j0 = await r0.json();
+    return new Response(JSON.stringify({ ok: !!j0.ok, empty: true, bytes: raw.length }),
+      { status: 200, headers: cors });
+  }
   lines.push("");
   if (body.orderNo) lines.push(body.orderNo);
   const stamp = [body.date, body.time].filter(Boolean).join("  ");

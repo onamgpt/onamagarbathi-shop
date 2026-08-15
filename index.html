@@ -593,13 +593,17 @@ function saveOrderToSheet(inv){
     // Telegram notification, sent from our own function so the destination
     // group is controlled by an environment variable rather than being
     // hardcoded inside an Apps Script deployment.
-    fetch("/.netlify/functions/notify-order", {
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({
+    //
+    // Built outside the fetch call deliberately. Anything that throws while
+    // assembling this — a missing variable, an undefined field — used to be
+    // swallowed by the surrounding catch, and the order went out as a bare
+    // heading with no details at all.
+    var notifyBody;
+    try {
+      notifyBody = JSON.stringify({
         orderNo: inv.invoiceNo||inv.orderId||"",
-        source: VISIT_SOURCE,
-        campaign: VISIT_CAMPAIGN,
+        source: (typeof VISIT_SOURCE!=="undefined"?VISIT_SOURCE:""),
+        campaign: (typeof VISIT_CAMPAIGN!=="undefined"?VISIT_CAMPAIGN:""),
         date: (function(){ var d=new Date();
           return ("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear(); })(),
         time: (function(){ var d=new Date();
@@ -613,7 +617,21 @@ function saveOrderToSheet(inv){
           name: c.name||"", phone: c.phone||"", address: c.line||"",
           city: c.city||"", state: c.state||"", pincode: c.pincode||""
         }
-      })
+      });
+    } catch(err) {
+      // Fall back to the bare essentials rather than sending nothing useful.
+      notifyBody = JSON.stringify({
+        orderNo: (inv&&(inv.invoiceNo||inv.orderId))||"",
+        total: (inv&&inv.total)||0,
+        paymentId: (inv&&inv.paymentId)||"",
+        items: [], customer: {},
+        buildError: String(err && err.message ? err.message : err)
+      });
+    }
+    fetch("/.netlify/functions/notify-order", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: notifyBody
     }).catch(function(){});
   }catch(e){}
 }
