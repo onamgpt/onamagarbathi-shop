@@ -633,6 +633,15 @@ function saveOrderToSheet(inv){
       headers:{"Content-Type":"application/json"},
       body: notifyBody
     }).catch(function(){});
+
+    // Same payload, sent as an email. Apps Script still sends its own copy —
+    // both run until this one has been seen to work, so an order is never
+    // silently unannounced during the changeover.
+    fetch("/.netlify/functions/order-email", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: notifyBody
+    }).catch(function(){});
   }catch(e){}
 }
 
