@@ -23,6 +23,9 @@ export default async (req) => {
     return new Response("Webhook secret not configured", { status: 500 });
   }
 
+  const KEY_ID = Netlify.env.get("RAZORPAY_KEY_ID");
+  const KEY_SECRET = Netlify.env.get("RAZORPAY_KEY_SECRET");
+
   // IMPORTANT: signature must be verified against the RAW request body,
   // exactly as Razorpay sent it - parsing to JSON first and re-serializing
   // would change whitespace/key order and break the signature check.
@@ -54,10 +57,71 @@ export default async (req) => {
     return new Response("Invalid JSON", { status: 400 });
   }
 
-  // Only act on a fully-paid Payment Link. partially_paid is intentionally
-  // ignored here since GST logging for a partial payment needs separate
-  // handling and that flow isn't enabled on this site's payment links
-  // (accept_partial is not set, so this should not normally occur).
+  // Root-cause fix for the pay_TRb7zoThBD1wNx incident: the dashboard's
+  // Automatic Capture setting only ever applies to payments created through
+  // the Orders API. Payment Links do not go through that path, and neither
+  // does any other collection method on this account - a printed static QR
+  // code included. Any of those can authorize and then sit uncaptured for
+  // days before Razorpay auto-refunds it, exactly as happened here.
+  //
+  // Rather than fix each payment method's integration separately - which
+  // would leave every method we haven't touched yet exposed to the same
+  // failure - this captures every authorized payment the moment it exists,
+  // account-wide, regardless of which product created it. This is Razorpay's
+  // own documented pattern for this exact situation: "Capturing payments for
+  // which you did not receive a response on the client-side is perhaps the
+  // most important use case for the payment.authorized event."
+  if (event.event === "payment.authorized") {
+    const payment = event.payload.payment.entity;
+
+    const eventId = req.headers.get("x-razorpay-event-id");
+    const dedupeStore = getStore("processed-webhook-events");
+    if (eventId) {
+      const already = await dedupeStore.get(eventId);
+      if (already) return new Response("Already processed", { status: 200 });
+    }
+
+    if (!KEY_ID || !KEY_SECRET) {
+      return new Response("Razorpay keys not configured - cannot capture", { status: 500 });
+    }
+
+    try {
+      const auth = Buffer.from(`${KEY_ID}:${KEY_SECRET}`).toString("base64");
+      const captureRes = await fetch(`https://api.razorpay.com/v1/payments/${payment.id}/capture`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": "Basic " + auth },
+        body: JSON.stringify({ amount: payment.amount, currency: payment.currency })
+      });
+      const captureData = await captureRes.json();
+      const captured = captureRes.ok && captureData.status === "captured";
+
+      if (eventId) await dedupeStore.set(eventId, "1");
+
+      const BOT_TOKEN = Netlify.env.get("TELEGRAM_BOT_TOKEN");
+      const CHAT_ID = Netlify.env.get("TELEGRAM_CHAT_ID");
+      if (BOT_TOKEN && CHAT_ID) {
+        const amt = (payment.amount / 100).toFixed(2);
+        const msg = captured
+          ? `\u2705 Auto-captured Rs.${amt} (${payment.id}) - was sitting authorized, now safely captured.`
+          : `\u26a0\ufe0f Capture attempt FAILED for ${payment.id}, Rs.${amt}: ${captureData.error ? captureData.error.description : "unknown error"}. This one may still expire and refund - check the Razorpay dashboard.`;
+        fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ chat_id: CHAT_ID, text: msg })
+        }).catch(() => {});
+      }
+
+      return new Response(JSON.stringify({ captured, payment_id: payment.id }), { status: 200, headers: { "Content-Type": "application/json" } });
+    } catch (e) {
+      // Non-2xx so Razorpay retries this webhook per its own backoff -
+      // a transient failure here should get another attempt, not silence.
+      return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+    }
+  }
+
+  // Only act on a fully-paid Payment Link beyond this point. partially_paid
+  // is intentionally ignored here since GST logging for a partial payment
+  // needs separate handling and that flow isn't enabled on this site's
+  // payment links (accept_partial is not set, so this should not normally occur).
   if (event.event !== "payment_link.paid") {
     return new Response("Event ignored", { status: 200 });
   }
