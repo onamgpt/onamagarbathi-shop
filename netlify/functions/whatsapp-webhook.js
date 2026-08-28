@@ -50,16 +50,25 @@ export default async (req) => {
         // Normalise to a 10-digit Indian number to match how orders store phone,
         // since orders are saved without the country code in customer_phone.
         const local = from.replace(/^91/, "");
-        await fetch(SUPABASE_URL + "/rest/v1/wa_optouts", {
-          method: "POST",
-          headers: {
-            "apikey": SUPABASE_KEY,
-            "Authorization": "Bearer " + SUPABASE_KEY,
-            "Content-Type": "application/json",
-            "Prefer": "resolution=merge-duplicates"
-          },
-          body: JSON.stringify([{ phone: local, opted_out_at: new Date().toISOString() }])
-        }).catch(() => {});
+        const sbHeaders = {
+          "apikey": SUPABASE_KEY,
+          "Authorization": "Bearer " + SUPABASE_KEY,
+          "Content-Type": "application/json"
+        };
+
+        // Opt-outs live in the existing kv table as a single JSON object keyed
+        // by phone — no dedicated table, same store the tracker already uses.
+        try {
+          const readRes = await fetch(SUPABASE_URL + "/rest/v1/kv?owner=eq.main&k=eq.wa_optouts&select=v", { headers: sbHeaders });
+          const readJson = await readRes.json();
+          const optouts = (Array.isArray(readJson) && readJson[0] && readJson[0].v) ? readJson[0].v : {};
+          optouts[local] = new Date().toISOString();
+          await fetch(SUPABASE_URL + "/rest/v1/kv?on_conflict=owner,k", {
+            method: "POST",
+            headers: { ...sbHeaders, "Prefer": "resolution=merge-duplicates" },
+            body: JSON.stringify({ owner: "main", k: "wa_optouts", v: optouts })
+          });
+        } catch (e) { /* best effort — never fail the webhook */ }
 
         // Confirm the opt-out back to the customer — required good practice,
         // and a plain-text reply is allowed since they just messaged us
