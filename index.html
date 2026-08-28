@@ -642,6 +642,14 @@ function saveOrderToSheet(inv){
       headers:{"Content-Type":"application/json"},
       body: notifyBody
     }).catch(function(){});
+
+    // WhatsApp order-confirmation — same payload, same fire-and-forget pattern
+    // as the two calls above. Never blocks or affects the checkout flow.
+    fetch("/.netlify/functions/wa-order-confirm", {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: notifyBody
+    }).catch(function(){});
   }catch(e){}
 }
 
