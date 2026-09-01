@@ -44,6 +44,28 @@ export default async (req) => {
       const from = msg.from; // sender's WhatsApp number, no '+'
       const text = (msg.text && msg.text.body) ? msg.text.body.trim().toLowerCase() : "";
 
+      // Any inbound message opens a 24-hour window in which we may send free
+      // text to that number. Record when, so the scheduler can tell whether a
+      // plain message is allowed or whether it has to fall back to a template.
+      if (from && SUPABASE_URL && SUPABASE_KEY) {
+        try {
+          const hdrs = {
+            "apikey": SUPABASE_KEY,
+            "Authorization": "Bearer " + SUPABASE_KEY,
+            "Content-Type": "application/json"
+          };
+          const r = await fetch(SUPABASE_URL + "/rest/v1/kv?owner=eq.main&k=eq.wa_last_inbound&select=v", { headers: hdrs });
+          const j = await r.json();
+          const seen = (Array.isArray(j) && j[0] && j[0].v) ? j[0].v : {};
+          seen[from] = new Date().toISOString();
+          await fetch(SUPABASE_URL + "/rest/v1/kv?on_conflict=owner,k", {
+            method: "POST",
+            headers: Object.assign({}, hdrs, { "Prefer": "resolution=merge-duplicates" }),
+            body: JSON.stringify({ owner: "main", k: "wa_last_inbound", v: seen })
+          });
+        } catch (e) { /* tracking must never block the reply below */ }
+      }
+
       const isOptOut = /^(stop|unsubscribe|opt.?out|cancel)\b/.test(text);
 
       if (isOptOut && from && SUPABASE_URL && SUPABASE_KEY) {
