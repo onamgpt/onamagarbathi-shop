@@ -3,7 +3,7 @@
 [build]
   publish = "."
   functions = "netlify/functions"
-  environment = { SECRETS_SCAN_OMIT_KEYS = "TELEGRAM_WEBSITE_ORDERS_ID,WHATSAPP_ACCESS_TOKEN" }
+  environment = { SECRETS_SCAN_OMIT_KEYS = "RAZORPAY_KEY_ID" }
 
 # SPA / single-page fallback: serve index.html for any unmatched route.
 # NOTE: never write a redirect whose `from` starts with /.netlify — that path

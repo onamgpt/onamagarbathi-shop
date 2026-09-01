@@ -51,7 +51,7 @@ export default async () => {
   if (!chat) {
     out.push("");
     out.push("PROBLEM: TELEGRAM_WEBSITE_ORDERS_ID is not set on this site.");
-    out.push("FIX: add it with the value -5479964253, then redeploy.");
+    out.push("FIX: add it in Netlify env vars (the Purchase/Sales group chat ID), then redeploy.");
     return new Response(out.join("\n"), { headers: { "Content-Type": "text/plain" } });
   }
 
