@@ -44,6 +44,24 @@ export default async (req) => {
       const from = msg.from; // sender's WhatsApp number, no '+'
       const text = (msg.text && msg.text.body) ? msg.text.body.trim().toLowerCase() : "";
 
+      // Log every call, before anything else can fail. Without this we cannot
+      // tell "Meta never called us" from "Meta called and the write failed".
+      if (SUPABASE_URL && SUPABASE_KEY) {
+        try {
+          const h2 = { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY,
+                       "Content-Type": "application/json" };
+          const rr = await fetch(SUPABASE_URL + "/rest/v1/kv?owner=eq.main&k=eq.wa_webhook_hits&select=v", { headers: h2 });
+          const jj = await rr.json();
+          const cur = (Array.isArray(jj) && jj[0] && jj[0].v && jj[0].v.log) ? jj[0].v.log : [];
+          cur.push(new Date().toISOString() + "  from " + (msg.from || "?") + "  type " + (msg.type || "?"));
+          await fetch(SUPABASE_URL + "/rest/v1/kv?on_conflict=owner,k", {
+            method: "POST",
+            headers: Object.assign({}, h2, { "Prefer": "resolution=merge-duplicates" }),
+            body: JSON.stringify({ owner: "main", k: "wa_webhook_hits", v: { log: cur.slice(-40) } })
+          });
+        } catch (e) { /* never block the reply */ }
+      }
+
       // Any inbound message opens a 24-hour window in which we may send free
       // text to that number. Record when, so the scheduler can tell whether a
       // plain message is allowed or whether it has to fall back to a template.
