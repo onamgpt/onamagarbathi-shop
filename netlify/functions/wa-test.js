@@ -27,7 +27,7 @@ export default async (request) => {
 
   const out = [];
   const reply = () =>
-    new Response(out.join("\n"), { headers: { "Content-Type": "text/plain" } });
+    new Response(out.join("\n"), { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 
   out.push("WhatsApp template test");
   out.push("======================");
