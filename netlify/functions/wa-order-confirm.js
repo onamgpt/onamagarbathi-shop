@@ -58,7 +58,10 @@ export default async (req) => {
       to: formatPhone(phone),
       type: "template",
       template: {
-        name: "order_confirmation",
+        // Utility, not Marketing. Same three parameters, but far cheaper per
+        // message and not suppressed for customers who opt out of promotions —
+        // a receipt should never depend on a marketing preference.
+        name: "order_confirm_utility",
         language: { code: "en" },
         components: [{
           type: "body",
