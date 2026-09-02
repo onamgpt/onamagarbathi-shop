@@ -33,8 +33,35 @@ export default async (req) => {
   const SUPABASE_URL = Netlify.env.get("SUPABASE_URL");
   const SUPABASE_KEY = Netlify.env.get("SUPABASE_SERVICE_KEY");
 
+  // Log the raw POST before any parsing. Logging further down, inside the
+  // message loop, meant a payload of an unexpected shape arrived and vanished
+  // silently — indistinguishable from Meta never calling at all.
+  let body;
   try {
-    const body = await req.json();
+    body = await req.json();
+  } catch (e) {
+    body = {};
+  }
+  if (SUPABASE_URL && SUPABASE_KEY) {
+    try {
+      const h0 = { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY,
+                   "Content-Type": "application/json" };
+      const r0 = await fetch(SUPABASE_URL + "/rest/v1/kv?owner=eq.main&k=eq.wa_webhook_hits&select=v", { headers: h0 });
+      const j0 = await r0.json();
+      const cur0 = (Array.isArray(j0) && j0[0] && j0[0].v && j0[0].v.log) ? j0[0].v.log : [];
+      const v0 = ((body.entry || [])[0] || {});
+      const c0 = ((v0.changes || [])[0] || {});
+      cur0.push(new Date().toISOString() + "  field=" + (c0.field || "?") +
+                "  keys=" + Object.keys(c0.value || {}).join("/") ||  "none");
+      await fetch(SUPABASE_URL + "/rest/v1/kv?on_conflict=owner,k", {
+        method: "POST",
+        headers: Object.assign({}, h0, { "Prefer": "resolution=merge-duplicates" }),
+        body: JSON.stringify({ owner: "main", k: "wa_webhook_hits", v: { log: cur0.slice(-40) } })
+      });
+    } catch (e) { /* never block the 200 back to Meta */ }
+  }
+
+  try {
     const entry = (body.entry && body.entry[0]) || {};
     const change = (entry.changes && entry.changes[0]) || {};
     const value = change.value || {};
