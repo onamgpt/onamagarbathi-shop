@@ -13,6 +13,8 @@ const SAMPLES = {
   order_shipped:      ["Test Customer", "TEST-001", "Professional Transport"],
   order_delivered:    ["Test Customer", "TEST-001"],
   reorder_nudge:      ["Test Customer"],
+  // Utility replacement for order_confirmation, which Meta filed as Marketing.
+  order_confirm_utility: ["Test Customer", "TEST-001", "\u20b91,250"],
 };
 
 export default async (request) => {
