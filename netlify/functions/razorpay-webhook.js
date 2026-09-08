@@ -216,12 +216,49 @@ export default async (req) => {
       await dedupeStore.set(eventId, "1");
     }
 
+    // Send the customer their WhatsApp confirmation. wa-order-confirm holds
+    // the approved utility template, so call it rather than duplicating the
+    // Graph API request here. Never allowed to fail the webhook ack — but the
+    // outcome is reported in the Telegram message below, because a silently
+    // unsent receipt is exactly the failure that went unnoticed before.
+    let waNote = "";
+    const SITE_URL = Netlify.env.get("URL");
+    const custPhone = customerDetails.customerPhone || "";
+    if (!custPhone) {
+      waNote = "\n\n\u26a0\ufe0f WhatsApp confirmation skipped: no customer phone on this order.";
+    } else if (!SITE_URL) {
+      waNote = "\n\n\u26a0\ufe0f WhatsApp confirmation skipped: site URL unavailable.";
+    } else {
+      try {
+        const waRes = await fetch(SITE_URL + "/.netlify/functions/wa-order-confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customer: { phone: custPhone, name: customerDetails.customerName || "" },
+            orderNo: referenceId,
+            total: amountPaid
+          })
+        });
+        const waJson = await waRes.json().catch(() => ({}));
+        if (!waJson.ok) {
+          waNote = "\n\n\u26a0\ufe0f WhatsApp confirmation failed: " +
+            (waJson.reason ||
+             (waJson.result && waJson.result.error && waJson.result.error.message) ||
+             "unknown");
+        } else {
+          waNote = "\n\u2713 WhatsApp confirmation sent to customer";
+        }
+      } catch (e) {
+        waNote = "\n\n\u26a0\ufe0f WhatsApp confirmation failed: " + String((e && e.message) || e);
+      }
+    }
+
     // Best-effort Telegram notification so payment confirmations from this
     // path are visible the same way other tracker/order events already are.
     const BOT_TOKEN = Netlify.env.get("TELEGRAM_BOT_TOKEN");
     const CHAT_ID = Netlify.env.get("TELEGRAM_CHAT_ID");
     if (BOT_TOKEN && CHAT_ID) {
-      const msg = `\u2705 WhatsApp order PAID\n\nRef: ${referenceId}\nPayment ID: ${paymentId}\nAmount: Rs.${amountPaid}\nCustomer: ${customerDetails.customerName || "N/A"}`;
+      const msg = `\u2705 WhatsApp order PAID\n\nRef: ${referenceId}\nPayment ID: ${paymentId}\nAmount: Rs.${amountPaid}\nCustomer: ${customerDetails.customerName || "N/A"}${waNote}`;
       fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
