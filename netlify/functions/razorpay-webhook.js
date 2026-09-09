@@ -183,31 +183,65 @@ export default async (req) => {
       };
     }
 
+    // Route through order-log rather than hitting Apps Script directly.
+    // Both call Apps Script exactly once, so the invoice number is unaffected
+    // - but order-log also mirrors the order into the Supabase `orders` and
+    // `order_lines` tables, which is what the tracker's Orders screen reads.
+    // Posting straight to Apps Script (and discarding the reply) is why
+    // WhatsApp payment-link orders got an invoice and an email but never
+    // appeared in Orders at all.
     const ORDER_LOG_SCRIPT_URL = Netlify.env.get("ORDER_LOG_SCRIPT_URL");
-    if (ORDER_LOG_SCRIPT_URL) {
+    const SITE_URL_FOR_LOG = Netlify.env.get("URL");
+    let orderLogNote = "";
+    if (SITE_URL_FOR_LOG || ORDER_LOG_SCRIPT_URL) {
       const totalTaxable = lineItems.reduce((s, i) => s + i.taxableValue, 0);
       const totalGst = lineItems.reduce((s, i) => s + i.gstAmount, 0);
+      const logPayload = {
+        orderId: referenceId,
+        paymentId: paymentId,
+        date: new Date().toISOString(),
+        customerName: customerDetails.customerName || "",
+        customerPhone: customerDetails.customerPhone || "",
+        customerAddress: customerDetails.customerAddress || "",
+        customerCity: customerDetails.customerCity || "",
+        customerPin: customerDetails.customerPin || "",
+        customerState: customerDetails.customerState || "",
+        customerGstin: customerDetails.customerGstin || "",
+        items: lineItems,
+        totalTaxableValue: Math.round(totalTaxable * 100) / 100,
+        totalGst: Math.round(totalGst * 100) / 100,
+        grandTotal: amountPaid
+      };
 
-      await fetch(ORDER_LOG_SCRIPT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId: referenceId,
-          paymentId: paymentId,
-          date: new Date().toISOString(),
-          customerName: customerDetails.customerName || "",
-          customerPhone: customerDetails.customerPhone || "",
-          customerAddress: customerDetails.customerAddress || "",
-          customerCity: customerDetails.customerCity || "",
-          customerPin: customerDetails.customerPin || "",
-          customerState: customerDetails.customerState || "",
-          customerGstin: customerDetails.customerGstin || "",
-          items: lineItems,
-          totalTaxableValue: Math.round(totalTaxable * 100) / 100,
-          totalGst: Math.round(totalGst * 100) / 100,
-          grandTotal: amountPaid
-        })
-      }).catch(() => {}); // GST logging failure should not fail the webhook ack
+      try {
+        if (SITE_URL_FOR_LOG) {
+          const lr = await fetch(SITE_URL_FOR_LOG + "/.netlify/functions/order-log", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(logPayload)
+          });
+          const lj = await lr.json().catch(() => ({}));
+          if (lj && lj.invoiceNo) {
+            orderLogNote = "\n\u2713 Logged as " + lj.invoiceNo +
+              (lj.supabaseStatus && lj.supabaseStatus !== "ok"
+                ? " (Orders screen: " + lj.supabaseStatus + ")" : " and visible in Orders");
+          } else {
+            orderLogNote = "\n\n\u26a0\ufe0f Order log returned no invoice number - this order may be missing from Orders.";
+          }
+        } else if (ORDER_LOG_SCRIPT_URL) {
+          // No site URL to reach our own function: fall back to the old direct
+          // path so GST logging still happens, but say so - the Orders screen
+          // will not see this one.
+          await fetch(ORDER_LOG_SCRIPT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(logPayload)
+          });
+          orderLogNote = "\n\n\u26a0\ufe0f Logged to GST only - site URL unavailable, so it is not in Orders.";
+        }
+      } catch (e) {
+        orderLogNote = "\n\n\u26a0\ufe0f Order logging failed: " + String((e && e.message) || e);
+      }
     }
 
     // Mark this event as processed (24h is more than enough given Razorpay's
@@ -258,7 +292,7 @@ export default async (req) => {
     const BOT_TOKEN = Netlify.env.get("TELEGRAM_BOT_TOKEN");
     const CHAT_ID = Netlify.env.get("TELEGRAM_CHAT_ID");
     if (BOT_TOKEN && CHAT_ID) {
-      const msg = `\u2705 WhatsApp order PAID\n\nRef: ${referenceId}\nPayment ID: ${paymentId}\nAmount: Rs.${amountPaid}\nCustomer: ${customerDetails.customerName || "N/A"}${waNote}`;
+      const msg = `\u2705 WhatsApp order PAID\n\nRef: ${referenceId}\nPayment ID: ${paymentId}\nAmount: Rs.${amountPaid}\nCustomer: ${customerDetails.customerName || "N/A"}${orderLogNote}${waNote}`;
       fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
