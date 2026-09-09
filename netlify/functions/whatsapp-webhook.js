@@ -70,6 +70,7 @@ export default async (req) => {
     for (const msg of messages) {
       const from = msg.from; // sender's WhatsApp number, no '+'
       const text = (msg.text && msg.text.body) ? msg.text.body.trim().toLowerCase() : "";
+      let isFirstContact = false;
 
       // Log every call, before anything else can fail. Without this we cannot
       // tell "Meta never called us" from "Meta called and the write failed".
@@ -102,6 +103,7 @@ export default async (req) => {
           const r = await fetch(SUPABASE_URL + "/rest/v1/kv?owner=eq.main&k=eq.wa_last_inbound&select=v", { headers: hdrs });
           const j = await r.json();
           const seen = (Array.isArray(j) && j[0] && j[0].v) ? j[0].v : {};
+          isFirstContact = !seen[from];
           seen[from] = new Date().toISOString();
           await fetch(SUPABASE_URL + "/rest/v1/kv?on_conflict=owner,k", {
             method: "POST",
@@ -111,7 +113,12 @@ export default async (req) => {
         } catch (e) { /* tracking must never block the reply below */ }
       }
 
+      // A number pressing the box's WhatsApp link and a number replying inside
+      // an existing thread both land here with no distinction otherwise. Only
+      // the box case should get a welcome - not every message in an ongoing
+      // conversation, and not the opt-out path below.
       const isOptOut = /^(stop|unsubscribe|opt.?out|cancel)\b/.test(text);
+      if (isOptOut) isFirstContact = false;
 
       if (isOptOut && from && SUPABASE_URL && SUPABASE_KEY) {
         // Normalise to a 10-digit Indian number to match how orders store phone,
@@ -151,6 +158,26 @@ export default async (req) => {
               to: from,
               type: "text",
               text: { body: "You've been unsubscribed from promotional messages. You'll still receive order updates for anything you order. Thank you!" }
+            })
+          }).catch(() => {});
+        }
+      } else if (isFirstContact && from) {
+        // First message ever from this number and not an opt-out - almost
+        // certainly someone who scanned the box QR code. Free text is
+        // allowed here: they just messaged us, which opens the 24h window.
+        const PHONE_NUMBER_ID = Netlify.env.get("WHATSAPP_PHONE_NUMBER_ID");
+        const ACCESS_TOKEN = Netlify.env.get("WHATSAPP_ACCESS_TOKEN");
+        if (PHONE_NUMBER_ID && ACCESS_TOKEN) {
+          fetch("https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages", {
+            method: "POST",
+            headers: { "Authorization": "Bearer " + ACCESS_TOKEN, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messaging_product: "whatsapp",
+              to: from,
+              type: "text",
+              text: { body: "Namaste! \ud83d\ude4f Welcome to Onam Agarbathi - incense since 1972. " +
+                "Browse our products at onamagarbathi.com, or just tell us what you're looking for " +
+                "and we'll help. Reply STOP anytime to opt out of promotional messages." }
             })
           }).catch(() => {});
         }
