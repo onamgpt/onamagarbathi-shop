@@ -318,8 +318,11 @@ footer{background:#080503;padding:36px 5vw;text-align:center;border-top:1px soli
   <div class="cart-header"><span class="cart-title">Your Cart</span><button class="cart-close" onclick="toggleCart()">X</button></div>
   <div class="cart-items" id="cartItems"><div class="cart-empty"><p>Your cart is empty.</p></div></div>
   <div class="cart-footer">
-    <div class="cart-subtotal"><span>Subtotal</span><span class="cart-total-amt" id="cartTotal">Rs.0</span></div>
-    <p class="cart-ship-note">Free shipping above Rs.499</p>
+    <div class="cart-subtotal"><span>Subtotal</span><span class="cart-total-amt" id="cartSubtotal">Rs.0</span></div>
+    <div class="cart-subtotal" id="cartShipRow" style="font-weight:400"><span>Delivery</span><span id="cartShip">Rs.0</span></div>
+    <div class="cart-subtotal"><span>Total</span><span class="cart-total-amt" id="cartTotal">Rs.0</span></div>
+    <p class="cart-ship-note" id="cartShipNote">Free delivery above Rs.650</p>
+    <p class="cart-ship-note" style="font-size:11px;opacity:.75"><a href="/policies.html" style="color:inherit">Shipping &amp; returns</a> · <a href="/privacy.html" style="color:inherit">Privacy</a></p>
     <button class="btn-checkout-wa" onclick="openAddrModal('razorpay')" id="payBtn">Pay Now</button>
     <button style="width:100%;background:var(--wa);color:white;border:none;padding:11px;font-family:Cinzel,serif;font-size:0.75rem;letter-spacing:0.1em;cursor:pointer;border-radius:3px;margin-top:8px" onclick="openAddrModal('whatsapp')">&#128172; Order via WhatsApp instead</button>
   </div>
@@ -835,7 +838,7 @@ function openProforma(cartItems, total, paymentLinkUrl, referenceId){
 // MRP is GST-inclusive (standard retail practice). We back-calculate the
 // taxable value and GST amount per line item for a clean, audit-ready record.
 function buildGstLineItems(){
-  return cart.map(function(item){
+  var lines = cart.map(function(item){
     var product = null;
     for(var i=0;i<PRODUCTS.length;i++){if(PRODUCTS[i].id===item.id){product=PRODUCTS[i];break;}}
     var gstRate = product ? (product.gstRate||5) : 5;
@@ -856,6 +859,27 @@ function buildGstLineItems(){
       gstAmount: Math.round(gstAmount*100)/100
     };
   });
+
+  // Shipping has to appear as a line or the invoice will not add up to what
+  // Razorpay charged. HSN 996812 is courier/delivery; GST on delivery follows
+  // the goods, which are all 5% here.
+  var ship = getShipping();
+  if(ship > 0){
+    var shipTaxable = ship / 1.05;
+    lines.push({
+      name: "Delivery charges",
+      packSize: "",
+      hsn: "996812",
+      qty: 1,
+      mrpPerUnit: ship,
+      unitPrice: Math.round(shipTaxable*100)/100,
+      lineTotal: ship,
+      taxableValue: Math.round(shipTaxable*100)/100,
+      gstRate: 5,
+      gstAmount: Math.round((ship-shipTaxable)*100)/100
+    });
+  }
+  return lines;
 }
 
 // Returns a Promise resolving to the PERMANENT, sequential invoice number
@@ -1005,16 +1029,38 @@ function closeWaPrep(){
   document.getElementById("waPrepModal").classList.remove("open");
 }
 
-function getTotal(){
+var SHIP_FLAT = 75;      // charged when the goods total is below the threshold
+var SHIP_FREE_ABOVE = 650;
+
+function getSubtotal(){
   var t=0;
   for(var i=0;i<cart.length;i++){t+=(cart[i].mrp||0)*cart[i].qty;}
   return t;
+}
+function getShipping(){
+  var s=getSubtotal();
+  if(s<=0) return 0;                    // empty cart pays nothing
+  return s>=SHIP_FREE_ABOVE ? 0 : SHIP_FLAT;
+}
+// Everything downstream - the Razorpay amount, the invoice, the WhatsApp
+// message - uses this, so shipping can never be shown but not charged.
+function getTotal(){
+  return getSubtotal()+getShipping();
 }
 
 function updateCartUI(){
   var count=0;
   for(var i=0;i<cart.length;i++){count+=cart[i].qty;}
   document.getElementById("cartCount").textContent=String(count);
+  var _sub=getSubtotal(), _ship=getShipping();
+  var _subEl=document.getElementById("cartSubtotal");
+  if(_subEl) _subEl.textContent="Rs."+String(_sub);
+  var _shipEl=document.getElementById("cartShip");
+  if(_shipEl) _shipEl.textContent = _ship? ("Rs."+String(_ship)) : "Free";
+  var _noteEl=document.getElementById("cartShipNote");
+  if(_noteEl) _noteEl.textContent = _ship
+    ? ("Add Rs."+String(SHIP_FREE_ABOVE-_sub)+" more for free delivery")
+    : "Free delivery on this order";
   document.getElementById("cartTotal").textContent="Rs."+String(getTotal());
   var el=document.getElementById("cartItems");
   if(!cart.length){el.innerHTML="<div class=\"cart-empty\"><p>Your cart is empty.</p></div>";return;}
