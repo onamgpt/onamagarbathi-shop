@@ -175,6 +175,36 @@ footer{background:#080503;padding:36px 5vw;text-align:center;border-top:1px soli
 }
 </style>
 <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+/* Meta Pixel. The ID comes from META_PIXEL_ID on this site's environment via
+   /site-config, so it can be switched on, changed or turned off without a code
+   push. If the variable is unset the pixel never loads - no errors, no broken
+   page. Every track call is guarded, so an ad-blocker or a failed load can
+   never break checkout. */
+(function(){
+  var queue = [];
+  window.metaTrack = function(ev, params){ queue.push([ev, params]); };
+
+  fetch("/.netlify/functions/site-config").then(function(r){ return r.json(); })
+  .then(function(cfg){
+    if(!cfg || !cfg.pixelId) return;
+    !function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?
+    n.callMethod.apply(n,arguments):n.queue.push(arguments)};if(!f._fbq)f._fbq=n;
+    n.push=n;n.loaded=!0;n.version="2.0";n.queue=[];t=b.createElement(e);t.async=!0;
+    t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s)}
+    (window,document,"script","https://connect.facebook.net/en_US/fbevents.js");
+
+    fbq("init", cfg.pixelId);
+    fbq("track", "PageView");
+
+    window.metaTrack = function(ev, params){
+      try{ fbq("track", ev, params || {}); }catch(e){}
+    };
+    queue.forEach(function(q){ window.metaTrack(q[0], q[1]); });
+    queue = [];
+  }).catch(function(){ /* offline or blocked - the no-op stays in place */ });
+})();
+</script>
 </head>
 <body>
 <nav>
@@ -1004,6 +1034,13 @@ function updateCartUI(){
 }
 
 function addToCart(id){
+  try{
+    var _p = PRODUCTS.filter(function(x){ return x.id === id; })[0];
+    if(_p) window.metaTrack("AddToCart", {
+      value: Number(_p.mrp) || 0, currency: "INR",
+      content_ids: [id], content_type: "product", content_name: _p.name || ""
+    });
+  }catch(e){}
   var p=null;
   for(var i=0;i<PRODUCTS.length;i++){if(PRODUCTS[i].id==id){p=PRODUCTS[i];break;}}
   if(!p) return;
@@ -1113,6 +1150,19 @@ function doStartRazorpay(){
       // invoice number is fetched in the background and the "View Invoice"
       // button will wait for it before opening, so the customer is never
       // shown a non-compliant or mismatched invoice number.
+      // Fire Purchase before anything that could throw, so a downstream
+      // failure never costs the conversion signal.
+      try{
+        window.metaTrack("Purchase", {
+          value: Number(total) || 0,
+          currency: "INR",
+          contents: (gstLineItems||[]).map(function(i){
+            return { id: i.name || "", quantity: i.qty || 1, item_price: i.mrpPerUnit || 0 };
+          }),
+          content_type: "product",
+          num_items: (gstLineItems||[]).length
+        });
+      }catch(e){}
       pendingInvoice = {orderId: thisOrderId, paymentId: response.razorpay_payment_id, lineItems: gstLineItems, total: total, invoiceNo: null, ready: false, customer: (savedAddress ? {name: savedAddress.name, phone: savedAddress.phone, line: savedAddress.line, city: savedAddress.city, pincode: savedAddress.pin, state: savedAddress.state, gstin: savedAddress.gstin} : {})};
       logOrderForGst(response.razorpay_payment_id, gstLineItems, total, thisOrderId).then(function(invoiceNo){
         pendingInvoice.invoiceNo = invoiceNo;
