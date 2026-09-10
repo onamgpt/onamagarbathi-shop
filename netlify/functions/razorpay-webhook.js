@@ -287,12 +287,71 @@ export default async (req) => {
       }
     }
 
+    // Meta Conversions API. Payment-link orders are paid on razorpay.com,
+    // often hours later and frequently on another device, so the browser pixel
+    // on our own site never sees them - this path is the only place that
+    // reliably knows the money arrived. Sent server-side, so ad-blockers and
+    // iOS privacy settings cannot drop it either.
+    //
+    // Customer phone is hashed (SHA-256, normalised to digits with country
+    // code) because Meta requires it and because sending a raw phone number to
+    // an ad platform would be indefensible regardless of what they require.
+    let capiNote = "";
+    const CAPI_TOKEN = Netlify.env.get("META_CAPI_TOKEN");
+    const PIXEL_ID = Netlify.env.get("META_PIXEL_ID");
+    if (CAPI_TOKEN && PIXEL_ID) {
+      try {
+        const digits = String(customerDetails.customerPhone || "").replace(/\D/g, "");
+        const e164 = digits ? (digits.length === 10 ? "91" + digits : digits) : "";
+        let phoneHash = null;
+        if (e164) {
+          const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(e164));
+          phoneHash = Array.from(new Uint8Array(buf))
+            .map((b) => b.toString(16).padStart(2, "0")).join("");
+        }
+        const capiRes = await fetch(
+          "https://graph.facebook.com/v21.0/" + PIXEL_ID + "/events?access_token=" +
+          encodeURIComponent(CAPI_TOKEN),
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              data: [{
+                event_name: "Purchase",
+                event_time: Math.floor(Date.now() / 1000),
+                // Same id the browser pixel would use, so if a customer does
+                // return to the site Meta deduplicates instead of double-counting.
+                event_id: referenceId,
+                action_source: "website",
+                event_source_url: "https://onamagarbathi.com/",
+                user_data: phoneHash ? { ph: [phoneHash] } : {},
+                custom_data: {
+                  currency: "INR",
+                  value: Number(amountPaid) || 0,
+                  order_id: referenceId
+                }
+              }]
+            })
+          }
+        );
+        const capiJson = await capiRes.json().catch(() => ({}));
+        if (capiJson && capiJson.events_received) {
+          capiNote = "\n\u2713 Purchase sent to Meta";
+        } else {
+          capiNote = "\n\n\u26a0\ufe0f Meta Purchase failed: " +
+            ((capiJson && capiJson.error && capiJson.error.message) || "unknown");
+        }
+      } catch (e) {
+        capiNote = "\n\n\u26a0\ufe0f Meta Purchase failed: " + String((e && e.message) || e);
+      }
+    }
+
     // Best-effort Telegram notification so payment confirmations from this
     // path are visible the same way other tracker/order events already are.
     const BOT_TOKEN = Netlify.env.get("TELEGRAM_BOT_TOKEN");
     const CHAT_ID = Netlify.env.get("TELEGRAM_CHAT_ID");
     if (BOT_TOKEN && CHAT_ID) {
-      const msg = `\u2705 WhatsApp order PAID\n\nRef: ${referenceId}\nPayment ID: ${paymentId}\nAmount: Rs.${amountPaid}\nCustomer: ${customerDetails.customerName || "N/A"}${orderLogNote}${waNote}`;
+      const msg = `\u2705 WhatsApp order PAID\n\nRef: ${referenceId}\nPayment ID: ${paymentId}\nAmount: Rs.${amountPaid}\nCustomer: ${customerDetails.customerName || "N/A"}${orderLogNote}${waNote}${capiNote}`;
       fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
