@@ -45,6 +45,12 @@ export default async (req) => {
       },
       notify: { sms: false, email: false }, // we send the link ourselves via WhatsApp
       reminder_enable: false,
+      // Without a callback the customer is stranded on Razorpay's "Payment
+      // Completed" screen with no way back - it looks like the order stopped
+      // half-way. Razorpay appends razorpay_payment_id and razorpay_payment_link_*
+      // to this URL, so the landing page can confirm the specific order.
+      callback_url: "https://onamagarbathi.com/?paid=1&ref=" + encodeURIComponent(referenceId),
+      callback_method: "get",
       notes: {
         source: "website-whatsapp-checkout",
         items: itemsDesc
