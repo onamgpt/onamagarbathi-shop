@@ -61,6 +61,7 @@
     <div class="tab on" data-t="cat">Catalogue</div>
     <div class="tab" data-t="buy">Buyers</div>
     <div class="tab" data-t="ord">Orders</div>
+    <div class="tab" data-t="req">Requests <span id="reqCount" class="pill"></span></div>
   </div>
 
   <!-- CATALOGUE -->
@@ -127,6 +128,25 @@
     </div>
   </div>
 
+  <!-- REQUESTS -->
+  <div id="tab-req" style="display:none">
+    <div class="card">
+      <h2>Buyer product requests</h2>
+      <p style="font-size:13px;color:var(--muted);margin:0 0 14px">
+        A buyer asked for these. Set the rate and approve to add it to their catalogue;
+        nothing is priced until you do.
+      </p>
+      <table>
+        <thead><tr>
+          <th>Buyer</th><th>Product</th><th class="hide">SKU</th>
+          <th class="r">Rate US$</th><th class="r hide">Unit/ctn</th><th class="r hide">MOQ</th><th></th>
+        </tr></thead>
+        <tbody id="rrows"></tbody>
+      </table>
+      <div id="reqMsg" class="msg"></div>
+    </div>
+  </div>
+
   <!-- ORDERS -->
   <div id="tab-ord" style="display:none">
     <div class="card">
@@ -161,7 +181,7 @@ async function api(p){
 
 async function load(){
   DATA=await api({action:"adminList"});
-  drawBuyers(); drawSelect(); drawProducts(); drawOrders();
+  drawBuyers(); drawSelect(); drawProducts(); drawOrders(); drawRequests();
 }
 
 /* ---- gate ---- */
@@ -179,7 +199,7 @@ $("apin").addEventListener("keydown",e=>{if(e.key==="Enter")$("go").click();});
 document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
   document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
   t.classList.add("on");
-  ["cat","buy","ord"].forEach(k=>$("tab-"+k).style.display = k===t.dataset.t?"":"none");
+  ["cat","buy","ord","req"].forEach(k=>$("tab-"+k).style.display = k===t.dataset.t?"":"none");
 });
 
 /* ---- buyers ---- */
@@ -262,6 +282,50 @@ $("prows").addEventListener("click",async e=>{
     if(!confirm("Remove this product?"))return;
     try{ await api({action:"adminDeleteProduct",id:tr.dataset.id}); await load(); say("catMsg","Removed","ok"); }
     catch(err){ say("catMsg",err.message,"err"); }
+  }
+});
+
+/* ---- requests ---- */
+function drawRequests(){
+  const rs=DATA.requests||[];
+  $("reqCount").textContent = rs.length ? rs.length : "";
+  $("rrows").innerHTML = rs.map(r=>`
+    <tr data-id="${r.id}">
+      <td><strong>${esc(r.buyer_code)}</strong></td>
+      <td><input data-f="name" value="${esc(r.name)}"></td>
+      <td class="hide"><input data-f="sku" value="${esc(r.sku)}" placeholder="SKU"></td>
+      <td class="r"><input class="n" data-f="rate" type="number" step="0.01" placeholder="0.00"></td>
+      <td class="r hide"><input class="n" data-f="upc" type="number" value="24"></td>
+      <td class="r hide"><input class="n" data-f="moq" type="number" value="5"></td>
+      <td class="r" style="white-space:nowrap">
+        <button class="sm ok">Approve</button>
+        <button class="danger no">×</button>
+      </td>
+      ${r.note?`<td style="display:none">${esc(r.note)}</td>`:''}
+    </tr>
+    ${r.note?`<tr><td colspan="7" style="font-size:12px;color:var(--muted);border:0;padding-top:0">
+        Note: ${esc(r.note)}</td></tr>`:''}`).join("")
+    || `<tr><td colspan="7" style="color:var(--muted)">No open requests</td></tr>`;
+}
+$("rrows").addEventListener("click",async e=>{
+  const tr=e.target.closest("tr"); if(!tr||!tr.dataset.id)return;
+  const g=f=>{const el=tr.querySelector('[data-f="'+f+'"]');return el?el.value:"";};
+  if(e.target.classList.contains("ok")){
+    if(!g("rate")){say("reqMsg","Enter a rate before approving","err");return;}
+    e.target.disabled=true;
+    try{
+      await api({action:"adminResolveRequest",id:tr.dataset.id,decision:"approve",
+        product:{buyer_code:tr.querySelector("strong").textContent,
+          name:g("name"),sku:g("sku")||g("name").toUpperCase().replace(/[^A-Z0-9]+/g,"-").slice(0,40),
+          rate_per_unit:g("rate"),units_per_carton:g("upc"),moq_cartons:g("moq")}});
+      await load(); say("reqMsg","Added to their catalogue","ok");
+    }catch(err){say("reqMsg",err.message,"err");e.target.disabled=false;}
+  }
+  if(e.target.classList.contains("no")){
+    if(!confirm("Decline this request?"))return;
+    try{ await api({action:"adminResolveRequest",id:tr.dataset.id,decision:"decline"});
+         await load(); say("reqMsg","Declined","ok"); }
+    catch(err){ say("reqMsg",err.message,"err"); }
   }
 });
 
