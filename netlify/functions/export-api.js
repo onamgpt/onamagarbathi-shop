@@ -9,6 +9,24 @@
 //    money in after                     -> P0102 (realisation of export bills)
 // ===========================================================================
 
+import crypto from "node:crypto";
+
+const RZP_ID  = () => Netlify.env.get("RAZORPAY_KEY_ID") || "";
+const RZP_SEC = () => Netlify.env.get("RAZORPAY_KEY_SECRET") || "";
+
+// Razorpay: USD amounts are sent in cents.
+async function rzp(path, body) {
+  const auth = Buffer.from(RZP_ID() + ":" + RZP_SEC()).toString("base64");
+  const r = await fetch("https://api.razorpay.com/v1" + path, {
+    method: body ? "POST" : "GET",
+    headers: { Authorization: "Basic " + auth, "Content-Type": "application/json" },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((d.error && d.error.description) || ("Razorpay " + r.status));
+  return d;
+}
+
 const SB_URL = () => Netlify.env.get("SUPABASE_URL") || "";
 const SB_KEY = () => Netlify.env.get("SUPABASE_SERVICE_KEY") || "";
 const ADMIN_PIN = () => Netlify.env.get("EXPORT_ADMIN_PIN") || "";
@@ -289,6 +307,72 @@ export default async (req) => {
       return J({ ok: true, added: fresh.length });
     }
 
+    // ---- payment: open a Razorpay order for one leg ----------------------
+    // The leg decides the purpose code, and the server decides the leg.
+    if (action === "createPayment") {
+      const buyer = await buyerFromPin(body.pin);
+      if (!buyer) return J({ error: "Access code not recognised" }, 401);
+      if (!RZP_ID() || !RZP_SEC()) return J({ error: "Razorpay not configured" }, 500);
+
+      const rows = await sb("GET", "/export_orders?order_no=eq." + q(String(body.order_no)) +
+        "&buyer_code=eq." + q(buyer.code) + "&select=*");
+      if (!rows.length) return J({ error: "Order not found" }, 404);
+      const order = rows[0];
+
+      const leg = body.leg === "balance" ? "balance" : "advance";
+      const amountUsd = leg === "advance" ? Number(order.deposit_usd) : Number(order.balance_usd);
+      if (!(amountUsd > 0)) return J({ error: "Nothing due on this leg" }, 400);
+
+      // Pre-shipment money is P0103; anything after the shipping bill is P0102.
+      const purpose = leg === "advance" ? "P0103" : "P0102";
+
+      const rzpOrder = await rzp("/orders", {
+        amount: Math.round(amountUsd * 100),
+        currency: "USD",
+        receipt: (order.order_no + "-" + leg).slice(0, 40),
+        notes: { order_no: order.order_no, buyer: buyer.code, leg, purpose_code: purpose }
+      });
+
+      await sb("POST", "/export_payments", [{
+        order_no: order.order_no, leg, purpose_code: purpose,
+        amount_usd: amountUsd, razorpay_order_id: rzpOrder.id, status: "created"
+      }]);
+
+      return J({ ok: true, key_id: RZP_ID(), rzp_order_id: rzpOrder.id,
+                 amount: rzpOrder.amount, currency: "USD",
+                 buyer_name: buyer.name, order_no: order.order_no, leg });
+    }
+
+    // ---- payment: verify the signature and mark it paid -------------------
+    if (action === "verifyPayment") {
+      const buyer = await buyerFromPin(body.pin);
+      if (!buyer) return J({ error: "Access code not recognised" }, 401);
+
+      const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = body;
+      if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature)
+        return J({ error: "Incomplete payment response" }, 400);
+
+      const expected = crypto.createHmac("sha256", RZP_SEC())
+        .update(razorpay_order_id + "|" + razorpay_payment_id).digest("hex");
+      if (expected !== razorpay_signature) {
+        await sb("PATCH", "/export_payments?razorpay_order_id=eq." + q(razorpay_order_id),
+          { status: "signature_failed" });
+        return J({ error: "Payment could not be verified" }, 400);
+      }
+
+      const pays = await sb("PATCH",
+        "/export_payments?razorpay_order_id=eq." + q(razorpay_order_id),
+        { status: "paid", razorpay_payment_id, paid_at: new Date().toISOString() },
+        "return=representation");
+
+      const pay = pays && pays[0];
+      if (pay) {
+        await sb("PATCH", "/export_orders?order_no=eq." + q(pay.order_no),
+          { status: pay.leg === "advance" ? "deposit_paid" : "closed" });
+      }
+      return J({ ok: true, payment: pay });
+    }
+
     // ---- admin -----------------------------------------------------------
     const admin = () => ADMIN_PIN() && body.adminPin && String(body.adminPin) === ADMIN_PIN();
 
@@ -298,7 +382,8 @@ export default async (req) => {
       const products = await sb("GET", "/export_products?select=*&order=buyer_code.asc,sort_order.asc");
       const orders = await sb("GET", "/export_orders?select=*&order=id.desc&limit=100");
       const requests = await sb("GET", "/export_requests?status=eq.open&select=*&order=id.desc");
-      return J({ ok: true, buyers, products, orders, requests });
+      const payments = await sb("GET", "/export_payments?select=*&order=id.desc&limit=100");
+      return J({ ok: true, buyers, products, orders, requests, payments });
     }
 
     if (action === "adminSaveBuyer") {
