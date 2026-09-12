@@ -79,8 +79,28 @@ export default async (req) => {
         "/export_products?buyer_code=eq." + q(buyer.code) +
         "&active=eq.true&select=*&order=sort_order.asc"
       );
+      // Everything in the range that is NOT already theirs — names only.
+      // Rates are deliberately withheld: an unquoted price is not theirs to see.
+      const all = await sb("GET", "/export_products?active=eq.true&select=sku,name");
+      const mine = new Set(products.map(p => p.name.toUpperCase()));
+      const seen = new Set();
+      const available = [];
+      all.forEach(p => {
+        const k = p.name.toUpperCase();
+        if (mine.has(k) || seen.has(k)) return;
+        seen.add(k);
+        available.push({ sku: p.sku, name: p.name });
+      });
+      available.sort((a, b) => a.name.localeCompare(b.name));
+
+      const openReqs = await sb("GET",
+        "/export_requests?buyer_code=eq." + q(buyer.code) +
+        "&status=eq.open&select=name&order=id.desc");
+
       return J({
         ok: true,
+        available,
+        pending: openReqs.map(r => r.name),
         buyer: {
           code: buyer.code, name: buyer.name, country: buyer.country,
           terms: buyer.terms, deposit_pct: Number(buyer.deposit_pct || 0),
@@ -158,6 +178,32 @@ export default async (req) => {
       }});
     }
 
+    // ---- buyer asks for an item not yet in their catalogue ---------------
+    if (action === "requestProduct") {
+      const buyer = await buyerFromPin(body.pin);
+      if (!buyer) return J({ error: "Access code not recognised" }, 401);
+
+      const items = Array.isArray(body.items) ? body.items : [];
+      const note = (body.note || "").slice(0, 300);
+      const rows = [];
+      items.slice(0, 40).forEach(it => {
+        const name = String(it.name || "").trim().slice(0, 120);
+        if (!name) return;
+        rows.push({ buyer_code: buyer.code, sku: it.sku || null, name, note, status: "open" });
+      });
+      if (!rows.length) return J({ error: "Nothing to request" }, 400);
+
+      // Don't stack duplicates of something already pending.
+      const open = await sb("GET",
+        "/export_requests?buyer_code=eq." + q(buyer.code) + "&status=eq.open&select=name");
+      const already = new Set(open.map(r => r.name.toUpperCase()));
+      const fresh = rows.filter(r => !already.has(r.name.toUpperCase()));
+      if (!fresh.length) return J({ ok: true, added: 0, message: "Already on your pending list" });
+
+      await sb("POST", "/export_requests", fresh);
+      return J({ ok: true, added: fresh.length });
+    }
+
     // ---- admin -----------------------------------------------------------
     const admin = () => ADMIN_PIN() && body.adminPin && String(body.adminPin) === ADMIN_PIN();
 
@@ -166,7 +212,8 @@ export default async (req) => {
       const buyers = await sb("GET", "/export_buyers?select=*&order=code.asc");
       const products = await sb("GET", "/export_products?select=*&order=buyer_code.asc,sort_order.asc");
       const orders = await sb("GET", "/export_orders?select=*&order=id.desc&limit=100");
-      return J({ ok: true, buyers, products, orders });
+      const requests = await sb("GET", "/export_requests?status=eq.open&select=*&order=id.desc");
+      return J({ ok: true, buyers, products, orders, requests });
     }
 
     if (action === "adminSaveBuyer") {
@@ -212,6 +259,31 @@ export default async (req) => {
       if (!admin()) return J({ error: "Not authorised" }, 401);
       if (!body.id) return J({ error: "Missing id" }, 400);
       await sb("DELETE", "/export_products?id=eq." + q(String(body.id)));
+      return J({ ok: true });
+    }
+
+    if (action === "adminResolveRequest") {
+      if (!admin()) return J({ error: "Not authorised" }, 401);
+      if (!body.id) return J({ error: "Missing id" }, 400);
+
+      if (body.decision === "approve") {
+        const p = body.product || {};
+        if (!p.sku || !p.name || p.rate_per_unit === undefined || p.rate_per_unit === "")
+          return J({ error: "SKU, name and rate are required to approve" }, 400);
+        await sb("POST", "/export_products", [{
+          buyer_code: String(p.buyer_code).toUpperCase().trim(),
+          sku: p.sku, name: p.name,
+          units_per_carton: parseInt(p.units_per_carton, 10) || 24,
+          rate_per_unit: Number(p.rate_per_unit),
+          moq_cartons: parseInt(p.moq_cartons, 10) || 1,
+          hs_code: p.hs_code || "33074100",
+          image_url: p.image_url || null,
+          sort_order: parseInt(p.sort_order, 10) || 999,
+          active: true
+        }]);
+      }
+      await sb("PATCH", "/export_requests?id=eq." + q(String(body.id)),
+        { status: body.decision === "approve" ? "approved" : "declined" });
       return J({ ok: true });
     }
 
