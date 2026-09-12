@@ -12,6 +12,89 @@
 const SB_URL = () => Netlify.env.get("SUPABASE_URL") || "";
 const SB_KEY = () => Netlify.env.get("SUPABASE_SERVICE_KEY") || "";
 const ADMIN_PIN = () => Netlify.env.get("EXPORT_ADMIN_PIN") || "";
+const MAIL_KEY  = () => Netlify.env.get("RESEND_API_KEY") || "";
+const MAIL_FROM = () => Netlify.env.get("MAIL_FROM") || "orders@onamagarbathi.com";
+const MAIL_TO   = () => (Netlify.env.get("EXPORT_MAIL_TO") ||
+                         Netlify.env.get("MAIL_TO") || "onamagarbathi@gmail.com")
+                        .split(",").map(x => x.trim()).filter(Boolean);
+
+const esc = (v) => String(v == null ? "" : v)
+  .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const fmt = (n) => Number(n || 0).toLocaleString("en-US",
+  { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Order notification. Never allowed to break the order itself — a mail
+// outage must not lose a customer's consignment.
+async function mailOrder(order, buyer) {
+  if (!MAIL_KEY()) return { sent: false, reason: "no key" };
+  const rows = order.lines.map(l => `
+    <tr>
+      <td align="right" style="padding:5px 8px;border-bottom:1px solid #eee">${l.cartons}</td>
+      <td align="right" style="padding:5px 8px;border-bottom:1px solid #eee">${l.units_per_carton}</td>
+      <td style="padding:5px 8px;border-bottom:1px solid #eee">${esc(l.name)}</td>
+      <td align="right" style="padding:5px 8px;border-bottom:1px solid #eee">${l.units}</td>
+      <td align="right" style="padding:5px 8px;border-bottom:1px solid #eee">${Number(l.rate_per_unit).toFixed(2)}</td>
+      <td align="right" style="padding:5px 8px;border-bottom:1px solid #eee">${fmt(l.amount)}</td>
+    </tr>`).join("");
+
+  let terms = "Payable on arrival of shipment.";
+  if (order.deposit_pct >= 100) terms = "100% advance with order: US$ " + fmt(order.total_usd);
+  else if (order.deposit_pct > 0)
+    terms = order.deposit_pct + "% with order (US$ " + fmt(order.deposit_usd) +
+            "), balance US$ " + fmt(order.balance_usd) + " on arrival.";
+
+  const html = `
+  <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;color:#1c1917;max-width:700px">
+    <p style="font-size:13px;color:#78716c;letter-spacing:.08em;text-transform:uppercase;margin:0">
+      Export order received</p>
+    <h2 style="margin:4px 0 2px">${esc(buyer.name)}</h2>
+    <p style="margin:0 0 18px;color:#78716c">
+      ${esc(buyer.country || "")} &middot; ${esc(buyer.incoterm || "")} ${esc(buyer.port || "")}
+      &middot; <strong>${esc(order.order_no)}</strong></p>
+    <table cellspacing="0" cellpadding="0" style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="background:#faf9f7">
+        <th align="right" style="padding:7px 8px">Ctns</th>
+        <th align="right" style="padding:7px 8px">Unit/Ctn</th>
+        <th align="left"  style="padding:7px 8px">Particulars</th>
+        <th align="right" style="padding:7px 8px">Units</th>
+        <th align="right" style="padding:7px 8px">Rate US$</th>
+        <th align="right" style="padding:7px 8px">Amount</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr style="font-weight:700;border-top:2px solid #1c1917">
+        <td align="right" style="padding:8px">${order.total_cartons}</td>
+        <td></td><td></td>
+        <td align="right" style="padding:8px">${order.total_units}</td>
+        <td></td>
+        <td align="right" style="padding:8px">US$ ${fmt(order.total_usd)}</td>
+      </tr></tfoot>
+    </table>
+    <p style="margin-top:16px"><strong>Terms:</strong> ${terms}</p>
+    ${order.notes ? `<p style="background:#f5f5f4;padding:10px;border-radius:6px">
+        <strong>Buyer's note:</strong> ${esc(order.notes)}</p>` : ""}
+    <p style="margin-top:22px">
+      <a href="https://onamagarbathi.com/export-admin"
+         style="background:#1c1917;color:#fff;padding:10px 18px;border-radius:6px;
+                text-decoration:none;font-weight:600">Open Export Admin</a></p>
+  </div>`;
+
+  try {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + MAIL_KEY(), "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: "Onam Exports <" + MAIL_FROM() + ">",
+        to: MAIL_TO(),
+        subject: "Export order " + order.order_no + " — " + buyer.name +
+                 " — US$ " + fmt(order.total_usd),
+        html
+      })
+    });
+    return { sent: r.ok };
+  } catch (e) {
+    return { sent: false, reason: String(e.message || e) };
+  }
+}
 
 const J = (obj, status = 200) =>
   new Response(JSON.stringify(obj), {
@@ -172,10 +255,12 @@ export default async (req) => {
         notes: (body.notes || "").slice(0, 500)
       }], "return=representation");
 
-      return J({ ok: true, order: inserted[0], buyer: {
+      const buyerOut = {
         code: buyer.code, name: buyer.name, country: buyer.country,
         incoterm: buyer.incoterm, port: buyer.port, currency: buyer.currency
-      }});
+      };
+      const mail = await mailOrder(inserted[0], buyerOut);
+      return J({ ok: true, order: inserted[0], buyer: buyerOut, mail });
     }
 
     // ---- buyer asks for an item not yet in their catalogue ---------------
@@ -296,6 +381,16 @@ export default async (req) => {
       });
       const upd = await sb("PATCH", "/export_orders?order_no=eq." + q(body.order_no), patch, "return=representation");
       return J({ ok: true, order: upd[0] });
+    }
+
+    if (action === "adminTestMail") {
+      if (!admin()) return J({ error: "Not authorised" }, 401);
+      const m = await mailOrder({
+        order_no: "TEST/0000", lines: [{ name: "Test line", cartons: 1, units_per_carton: 24,
+          units: 24, rate_per_unit: 2.28, amount: 54.72 }],
+        total_cartons: 1, total_units: 24, total_usd: 54.72, deposit_pct: 0, notes: "Test only"
+      }, { name: "Mail test", country: "—", incoterm: "C&F", port: "—" });
+      return J({ ok: true, mail: m, to: MAIL_TO() });
     }
 
     // Health check — confirms the site can reach Supabase at all.
