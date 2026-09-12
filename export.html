@@ -77,6 +77,7 @@
     .wrap{padding:14px 12px 48px}
   }
 </style>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body>
 
@@ -170,6 +171,17 @@
 <!-- ==================== PROFORMA ==================== -->
 <div id="pfWrap" class="wrap" style="display:none">
   <div class="card pf" id="pf"></div>
+  <div class="card noprint" id="payCard" style="display:none;text-align:center">
+    <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">
+      Due now</div>
+    <div style="font-size:28px;font-weight:700;margin:4px 0 14px">
+      US$ <span id="payAmt">0.00</span></div>
+    <button id="payBtn">Pay by card</button>
+    <div id="payMsg" class="msg"></div>
+    <p style="font-size:12px;color:var(--muted);margin:14px 0 0">
+      Secured by Razorpay. Cards are charged in US dollars.</p>
+  </div>
+
   <div class="noprint" style="display:flex;gap:10px;justify-content:center">
     <button onclick="window.print()">Print / Save PDF</button>
     <button class="ghost" id="backBtn">Back to catalogue</button>
@@ -406,9 +418,72 @@ function showProforma(order, buyer){
       Commercial invoice follows on shipment.
     </p>`;
 
+  // Only terms that take money up front get a pay button. Dubai and Muscat
+  // settle on arrival, so nothing is shown to them here.
+  const due = Number(order.deposit_usd || 0);
+  if(due > 0){
+    $("payAmt").textContent = money(due);
+    $("payCard").style.display = "";
+    $("payBtn").disabled = false;
+    say("payMsg","");
+    $("payBtn").onclick = () => payNow(order.order_no, "advance", buyer);
+  } else {
+    $("payCard").style.display = "none";
+  }
+
   $("app").style.display = "none";
   $("pfWrap").style.display = "";
   window.scrollTo(0,0);
+}
+
+/* ---------- card payment ---------- */
+async function payNow(orderNo, leg, buyer){
+  $("payBtn").disabled = true;
+  say("payMsg","Opening secure checkout…","ok");
+  let d;
+  try{
+    d = await api({ action:"createPayment", pin: PIN, order_no: orderNo, leg });
+  }catch(e){
+    say("payMsg", e.message, "err"); $("payBtn").disabled = false; return;
+  }
+  if(typeof Razorpay === "undefined"){
+    say("payMsg","Checkout could not load. Please check your connection.","err");
+    $("payBtn").disabled = false; return;
+  }
+
+  const rz = new Razorpay({
+    key: d.key_id,
+    order_id: d.rzp_order_id,
+    amount: d.amount,
+    currency: d.currency,
+    name: "Onam Agarbathi Pvt. Ltd.",
+    description: orderNo + " — " + (leg === "advance" ? "advance" : "balance"),
+    prefill: { name: buyer.name },
+    theme: { color: "#9a6b2f" },
+    modal: { ondismiss: () => {
+      say("payMsg","Payment cancelled. You can try again.","err");
+      $("payBtn").disabled = false;
+    }},
+    handler: async (resp) => {
+      say("payMsg","Confirming your payment…","ok");
+      try{
+        await api({ action:"verifyPayment", pin: PIN,
+          razorpay_order_id: resp.razorpay_order_id,
+          razorpay_payment_id: resp.razorpay_payment_id,
+          razorpay_signature: resp.razorpay_signature });
+        say("payMsg","Payment received. Thank you — we will confirm by email.","ok");
+        $("payBtn").style.display = "none";
+      }catch(e){
+        say("payMsg","Your card was charged but confirmation failed. "+
+                     "Please contact us quoting "+orderNo+".","err");
+      }
+    }
+  });
+  rz.on("payment.failed", r => {
+    say("payMsg", (r.error && r.error.description) || "Payment failed.", "err");
+    $("payBtn").disabled = false;
+  });
+  rz.open();
 }
 
 $("backBtn").onclick = () => {
