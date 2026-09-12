@@ -5,6 +5,13 @@
   functions = "netlify/functions"
   environment = { SECRETS_SCAN_OMIT_KEYS = "RAZORPAY_KEY_ID" }
 
+# Export order portal — must come BEFORE the SPA catch-all, or /export would
+# be swallowed by index.html.
+[[redirects]]
+  from = "/export"
+  to = "/export.html"
+  status = 200
+
 # SPA / single-page fallback: serve index.html for any unmatched route.
 # NOTE: never write a redirect whose `from` starts with /.netlify — that path
 # is reserved by Netlify and causes "Invalid /.netlify path in redirect source".
