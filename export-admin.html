@@ -81,7 +81,7 @@
         <thead><tr>
           <th>Product name</th><th class="hide">SKU</th>
           <th class="r">Rate US$</th><th class="r hide">Unit/ctn</th>
-          <th class="r hide">MOQ</th><th class="r">Live</th><th></th>
+          <th class="r hide">MOQ</th><th class="hide">Image URL</th><th class="r">Live</th><th></th>
         </tr></thead>
         <tbody id="prows"></tbody>
       </table>
@@ -221,6 +221,7 @@ function prow(p){
     <td class="r"><input class="f n" data-f="rate_per_unit" type="number" step="0.01" value="${p.rate_per_unit}"></td>
     <td class="r hide"><input class="f n" data-f="units_per_carton" type="number" value="${p.units_per_carton}"></td>
     <td class="r hide"><input class="f n" data-f="moq_cartons" type="number" value="${p.moq_cartons}"></td>
+    <td class="hide"><input class="f" data-f="image_url" value="${esc(p.image_url)}" placeholder="/catalog-images/name.jpg"></td>
     <td class="r"><input class="f" data-f="active" type="checkbox" ${p.active?"checked":""} style="width:20px;height:20px"></td>
     <td class="r" style="white-space:nowrap">
       <button class="sm save">Save</button>
@@ -238,7 +239,7 @@ $("addRow").onclick=()=>{
   if(!code){say("catMsg","Create a buyer first","err");return;}
   const n=DATA.products.filter(p=>p.buyer_code===code).length;
   $("prows").insertAdjacentHTML("afterbegin",prow(
-    {name:"",sku:"",rate_per_unit:"",units_per_carton:24,moq_cartons:5,active:true,sort_order:n+1}));
+    {name:"",sku:"",rate_per_unit:"",units_per_carton:24,moq_cartons:5,image_url:"",active:true,sort_order:n+1}));
 };
 $("prows").addEventListener("input",e=>{
   const tr=e.target.closest("tr"); if(tr) tr.querySelector(".save").classList.add("dirty");
@@ -249,7 +250,8 @@ $("prows").addEventListener("click",async e=>{
     const g=f=>{const el=tr.querySelector('[data-f="'+f+'"]');return el?(el.type==="checkbox"?el.checked:el.value):undefined;};
     const product={id:tr.dataset.id||undefined,buyer_code:$("selBuyer").value,
       name:g("name"),sku:g("sku"),rate_per_unit:g("rate_per_unit"),
-      units_per_carton:g("units_per_carton"),moq_cartons:g("moq_cartons"),active:g("active")};
+      units_per_carton:g("units_per_carton"),moq_cartons:g("moq_cartons"),
+      image_url:g("image_url"),active:g("active")};
     if(!product.name||!product.sku||product.rate_per_unit===""){say("catMsg","Name, SKU and rate are required","err");return;}
     e.target.disabled=true;
     try{ await api({action:"adminSaveProduct",product}); await load();
