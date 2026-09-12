@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Export Admin — Onam Agarbathi</title>
+<style>
+  :root{--ink:#1c1917;--muted:#78716c;--line:#e7e5e4;--bg:#faf9f7;--gold:#9a6b2f;--ok:#166534;--err:#9f1239}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1100px;margin:0 auto;padding:18px 14px 70px}
+  h1{font-size:19px;margin:0 0 2px}
+  h2{font-size:14px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 12px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:14px}
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:5px}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;font-size:16px;font-family:inherit;background:#fff}
+  button{background:var(--ink);color:#fff;border:0;border-radius:6px;padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+  button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  button.danger{background:#fff;color:var(--err);border:1px solid #fecdd3;padding:7px 11px;font-size:13px}
+  button.sm{padding:7px 12px;font-size:13px}
+  .grid{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .msg{padding:10px 13px;border-radius:6px;font-size:14px;margin-top:11px;display:none}
+  .msg.err{background:#fff1f2;color:var(--err);display:block}
+  .msg.ok{background:#f0fdf4;color:var(--ok);display:block}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line)}
+  td{padding:7px 6px;border-bottom:1px solid #f5f5f4}
+  th.r,td.r{text-align:right}
+  td input{padding:7px;font-size:14px}
+  td input.n{text-align:right}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tab{padding:8px 15px;border-radius:999px;border:1px solid var(--line);background:#fff;font-size:14px;cursor:pointer;font-weight:600}
+  .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:#f5f5f4;color:var(--muted)}
+  .dirty{outline:2px solid var(--gold);outline-offset:-1px}
+  #gate{max-width:340px;margin:14vh auto 0}
+  @media(max-width:640px){ .hide{display:none} }
+</style>
+</head>
+<body>
+
+<div id="gate" class="wrap">
+  <div class="card">
+    <h1 style="text-align:center;margin-bottom:14px">Export Admin</h1>
+    <label for="apin">Admin PIN</label>
+    <input id="apin" type="password" inputmode="numeric" autocomplete="off">
+    <div style="height:12px"></div>
+    <button id="go" style="width:100%">Open</button>
+    <div id="gm" class="msg"></div>
+  </div>
+</div>
+
+<div id="app" class="wrap" style="display:none">
+  <h1>Export Admin</h1>
+  <p style="color:var(--muted);font-size:13px;margin:0 0 16px">
+    Buyers, rates and orders. Changes are live the moment you save.
+  </p>
+
+  <div class="tabs">
+    <div class="tab on" data-t="cat">Catalogue</div>
+    <div class="tab" data-t="buy">Buyers</div>
+    <div class="tab" data-t="ord">Orders</div>
+  </div>
+
+  <!-- CATALOGUE -->
+  <div id="tab-cat">
+    <div class="card">
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:170px">
+          <label for="selBuyer">Buyer</label>
+          <select id="selBuyer"></select>
+        </div>
+        <button class="ghost sm" id="addRow">+ Add product</button>
+      </div>
+      <div id="catMsg" class="msg"></div>
+    </div>
+
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Product name</th><th class="hide">SKU</th>
+          <th class="r">Rate US$</th><th class="r hide">Unit/ctn</th>
+          <th class="r hide">MOQ</th><th class="r">Live</th><th></th>
+        </tr></thead>
+        <tbody id="prows"></tbody>
+      </table>
+      <p style="font-size:12px;color:var(--muted);margin:12px 0 0">
+        Edit any field, then Save on that row. Rates apply to new orders only —
+        orders already placed keep the price they were quoted.
+      </p>
+    </div>
+  </div>
+
+  <!-- BUYERS -->
+  <div id="tab-buy" style="display:none">
+    <div class="card">
+      <h2>Add or update a buyer</h2>
+      <div class="grid">
+        <div><label>Code</label><input id="b_code" placeholder="TRINIDAD"></div>
+        <div><label>Name</label><input id="b_name" placeholder="M/s. ..."></div>
+        <div><label>Country</label><input id="b_country"></div>
+        <div><label>Access PIN</label><input id="b_pin" inputmode="numeric"></div>
+        <div><label>Terms</label>
+          <select id="b_terms">
+            <option value="on_arrival">Pay on arrival</option>
+            <option value="deposit">Deposit + balance</option>
+            <option value="advance">100% advance</option>
+          </select></div>
+        <div><label>Deposit %</label><input id="b_dep" type="number" value="0"></div>
+        <div><label>Incoterm</label><input id="b_inco" value="C&F"></div>
+        <div><label>Port</label><input id="b_port" placeholder="Jebel Ali"></div>
+      </div>
+      <div style="height:13px"></div>
+      <button id="saveBuyer">Save buyer</button>
+      <div id="buyMsg" class="msg"></div>
+      <p style="font-size:12px;color:var(--muted);margin-top:12px">
+        An existing code updates that buyer. A new code creates one. Each buyer sees only their own products.
+      </p>
+    </div>
+    <div class="card">
+      <h2>Current buyers</h2>
+      <table>
+        <thead><tr><th>Code</th><th>Name</th><th class="hide">Terms</th><th class="r">PIN</th><th class="r">SKUs</th></tr></thead>
+        <tbody id="brows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ORDERS -->
+  <div id="tab-ord" style="display:none">
+    <div class="card">
+      <h2>Recent orders</h2>
+      <table>
+        <thead><tr><th>Order</th><th class="hide">Buyer</th><th class="r">US$</th><th>Status</th><th class="hide">Shipping bill</th><th></th></tr></thead>
+        <tbody id="orows"></tbody>
+      </table>
+      <div id="ordMsg" class="msg"></div>
+      <p style="font-size:12px;color:var(--muted);margin:12px 0 0">
+        Enter the shipping bill number once filed — it closes the EDPMS link between the advance and the balance leg.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+const API="/.netlify/functions/export-api";
+let PIN="", DATA={buyers:[],products:[],orders:[]};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money=n=>Number(n||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+function say(el,t,k){const m=$(el);m.textContent=t;m.className="msg "+(k||"");if(!t)m.className="msg";}
+
+async function api(p){
+  const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(Object.assign({adminPin:PIN},p))});
+  const d=await r.json().catch(()=>({error:"No response"}));
+  if(!r.ok) throw new Error(d.error||"Failed");
+  return d;
+}
+
+async function load(){
+  DATA=await api({action:"adminList"});
+  drawBuyers(); drawSelect(); drawProducts(); drawOrders();
+}
+
+/* ---- gate ---- */
+$("go").onclick=async()=>{
+  PIN=$("apin").value.trim(); if(!PIN)return;
+  $("go").disabled=true; say("gm","");
+  try{ await load(); sessionStorage.setItem("onx_admin",PIN);
+       $("gate").style.display="none"; $("app").style.display=""; }
+  catch(e){ say("gm",e.message,"err"); PIN=""; }
+  finally{ $("go").disabled=false; }
+};
+$("apin").addEventListener("keydown",e=>{if(e.key==="Enter")$("go").click();});
+
+/* ---- tabs ---- */
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+  t.classList.add("on");
+  ["cat","buy","ord"].forEach(k=>$("tab-"+k).style.display = k===t.dataset.t?"":"none");
+});
+
+/* ---- buyers ---- */
+function drawSelect(){
+  const cur=$("selBuyer").value;
+  $("selBuyer").innerHTML=DATA.buyers.map(b=>
+    `<option value="${esc(b.code)}">${esc(b.code)} — ${esc(b.name)}</option>`).join("");
+  if(cur) $("selBuyer").value=cur;
+}
+$("selBuyer").onchange=drawProducts;
+
+function drawBuyers(){
+  $("brows").innerHTML=DATA.buyers.map(b=>{
+    const n=DATA.products.filter(p=>p.buyer_code===b.code).length;
+    const t=b.terms==="advance"?"100% advance":b.terms==="deposit"?(b.deposit_pct+"% deposit"):"On arrival";
+    return `<tr><td><strong>${esc(b.code)}</strong></td><td>${esc(b.name)}</td>
+      <td class="hide"><span class="pill">${t}</span></td>
+      <td class="r">${esc(b.pin)}</td><td class="r">${n}</td></tr>`;}).join("")
+    || `<tr><td colspan="5" style="color:var(--muted)">No buyers yet</td></tr>`;
+}
+
+$("saveBuyer").onclick=async()=>{
+  const buyer={code:$("b_code").value,name:$("b_name").value,country:$("b_country").value,
+    pin:$("b_pin").value,terms:$("b_terms").value,deposit_pct:$("b_dep").value,
+    incoterm:$("b_inco").value,port:$("b_port").value,currency:"USD"};
+  if(!buyer.code||!buyer.name||!buyer.pin){say("buyMsg","Code, name and PIN are required","err");return;}
+  try{ await api({action:"adminSaveBuyer",buyer}); await load();
+       say("buyMsg","Saved "+buyer.code.toUpperCase(),"ok");
+       ["b_code","b_name","b_country","b_pin","b_port"].forEach(i=>$(i).value=""); }
+  catch(e){ say("buyMsg",e.message,"err"); }
+};
+
+/* ---- products ---- */
+function prow(p){
+  const id=p.id||"";
+  return `<tr data-id="${id}" data-new="${p.id?0:1}">
+    <td><input class="f" data-f="name" value="${esc(p.name)}"></td>
+    <td class="hide"><input class="f" data-f="sku" value="${esc(p.sku)}"></td>
+    <td class="r"><input class="f n" data-f="rate_per_unit" type="number" step="0.01" value="${p.rate_per_unit}"></td>
+    <td class="r hide"><input class="f n" data-f="units_per_carton" type="number" value="${p.units_per_carton}"></td>
+    <td class="r hide"><input class="f n" data-f="moq_cartons" type="number" value="${p.moq_cartons}"></td>
+    <td class="r"><input class="f" data-f="active" type="checkbox" ${p.active?"checked":""} style="width:20px;height:20px"></td>
+    <td class="r" style="white-space:nowrap">
+      <button class="sm save">Save</button>
+      ${p.id?'<button class="danger del">×</button>':''}
+    </td></tr>`;
+}
+function drawProducts(){
+  const code=$("selBuyer").value;
+  const list=DATA.products.filter(p=>p.buyer_code===code);
+  $("prows").innerHTML=list.map(prow).join("")
+    || `<tr><td colspan="7" style="color:var(--muted)">No products for this buyer yet — use Add product.</td></tr>`;
+}
+$("addRow").onclick=()=>{
+  const code=$("selBuyer").value;
+  if(!code){say("catMsg","Create a buyer first","err");return;}
+  const n=DATA.products.filter(p=>p.buyer_code===code).length;
+  $("prows").insertAdjacentHTML("afterbegin",prow(
+    {name:"",sku:"",rate_per_unit:"",units_per_carton:24,moq_cartons:5,active:true,sort_order:n+1}));
+};
+$("prows").addEventListener("input",e=>{
+  const tr=e.target.closest("tr"); if(tr) tr.querySelector(".save").classList.add("dirty");
+});
+$("prows").addEventListener("click",async e=>{
+  const tr=e.target.closest("tr"); if(!tr)return;
+  if(e.target.classList.contains("save")){
+    const g=f=>{const el=tr.querySelector('[data-f="'+f+'"]');return el?(el.type==="checkbox"?el.checked:el.value):undefined;};
+    const product={id:tr.dataset.id||undefined,buyer_code:$("selBuyer").value,
+      name:g("name"),sku:g("sku"),rate_per_unit:g("rate_per_unit"),
+      units_per_carton:g("units_per_carton"),moq_cartons:g("moq_cartons"),active:g("active")};
+    if(!product.name||!product.sku||product.rate_per_unit===""){say("catMsg","Name, SKU and rate are required","err");return;}
+    e.target.disabled=true;
+    try{ await api({action:"adminSaveProduct",product}); await load();
+         say("catMsg","Saved "+product.name,"ok"); }
+    catch(err){ say("catMsg",err.message,"err"); e.target.disabled=false; }
+  }
+  if(e.target.classList.contains("del")){
+    if(!confirm("Remove this product?"))return;
+    try{ await api({action:"adminDeleteProduct",id:tr.dataset.id}); await load(); say("catMsg","Removed","ok"); }
+    catch(err){ say("catMsg",err.message,"err"); }
+  }
+});
+
+/* ---- orders ---- */
+function drawOrders(){
+  $("orows").innerHTML=(DATA.orders||[]).map(o=>`
+    <tr data-no="${esc(o.order_no)}">
+      <td><strong>${esc(o.order_no)}</strong><div style="font-size:11px;color:var(--muted)">${o.total_cartons} ctns</div></td>
+      <td class="hide">${esc(o.buyer_code)}</td>
+      <td class="r">${money(o.total_usd)}</td>
+      <td><select data-f="status">
+        ${["placed","deposit_paid","dispatched","closed"].map(s=>
+          `<option value="${s}"${o.status===s?" selected":""}>${s.replace("_"," ")}</option>`).join("")}
+      </select></td>
+      <td class="hide"><input data-f="sb" value="${esc(o.shipping_bill_no)}" placeholder="Shipping bill no."></td>
+      <td class="r"><button class="sm upd">Update</button></td>
+    </tr>`).join("") || `<tr><td colspan="6" style="color:var(--muted)">No orders yet</td></tr>`;
+}
+$("orows").addEventListener("click",async e=>{
+  if(!e.target.classList.contains("upd"))return;
+  const tr=e.target.closest("tr");
+  e.target.disabled=true;
+  try{
+    await api({action:"adminUpdateOrder",order_no:tr.dataset.no,
+      status:tr.querySelector('[data-f="status"]').value,
+      shipping_bill_no:tr.querySelector('[data-f="sb"]').value});
+    await load(); say("ordMsg","Order updated","ok");
+  }catch(err){ say("ordMsg",err.message,"err"); e.target.disabled=false; }
+});
+
+/* ---- resume ---- */
+(async function(){
+  const s=sessionStorage.getItem("onx_admin"); if(!s)return;
+  PIN=s;
+  try{ await load(); $("gate").style.display="none"; $("app").style.display=""; }
+  catch(e){ sessionStorage.removeItem("onx_admin"); PIN=""; }
+})();
+</script>
+</body>
+</html>
