@@ -57,6 +57,14 @@
   .tot{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
   .tot small{display:block;font-size:11px;font-weight:500;color:var(--muted);
              text-transform:uppercase;letter-spacing:.08em}
+  /* request panel */
+  .reqbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+          margin-bottom:12px}
+  .chk{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid #f5f5f4}
+  .chk input{width:19px;height:19px;flex:none}
+  .chk label{margin:0;text-transform:none;letter-spacing:0;font-size:14px;color:var(--ink)}
+  .reqlist{max-height:46vh;overflow:auto;margin:6px 0 14px}
+  .pend{font-size:12px;color:var(--gold);margin-top:8px}
   /* proforma */
   .pf{font-size:13px}
   .pf h2{font-size:15px;letter-spacing:.16em;text-align:center;text-transform:uppercase;margin:0 0 18px}
@@ -126,6 +134,27 @@
     </div>
   </div>
 
+  <div class="card noprint" id="reqCard" style="display:none">
+    <div class="reqbar">
+      <div>
+        <strong style="font-size:15px">Ask for another product</strong>
+        <div class="sub">Not in your list above? Tick what you would like and we will
+          quote it for your next consignment.</div>
+      </div>
+      <button class="ghost" id="reqToggle">Browse range</button>
+    </div>
+    <div id="reqBody" style="display:none">
+      <input id="reqFilter" placeholder="Search the range…" style="margin-bottom:4px">
+      <div class="reqlist" id="reqList"></div>
+      <label for="reqNote">Anything else (optional)</label>
+      <textarea id="reqNote" rows="2" placeholder="A fragrance or pack size not listed here…"></textarea>
+      <div style="height:11px"></div>
+      <button id="reqSend">Send request</button>
+    </div>
+    <div id="reqMsg" class="msg"></div>
+    <div class="pend" id="reqPending"></div>
+  </div>
+
   <div class="card noprint">
     <label for="notes">Shipping marks or instructions (optional)</label>
     <textarea id="notes" rows="2" placeholder="Container preference, marking, delivery week…"></textarea>
@@ -149,7 +178,7 @@
 
 <script>
 const API = "/.netlify/functions/export-api";
-let PIN = "", BUYER = null, PRODUCTS = [];
+let PIN = "", BUYER = null, PRODUCTS = [], AVAILABLE = [], PENDING = [];
 
 const $ = id => document.getElementById(id);
 const money = n => Number(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -180,6 +209,7 @@ async function enter(){
   try{
     const d = await api({action:"login", pin});
     PIN = pin; BUYER = d.buyer; PRODUCTS = d.products || [];
+    AVAILABLE = d.available || []; PENDING = d.pending || [];
     sessionStorage.setItem("onx_pin", pin);
     render();
   }catch(e){
@@ -224,7 +254,61 @@ function render(){
 
   $("rows").addEventListener("input", recalc);
   recalc();
+  renderRequests();
 }
+
+/* ---------- product requests ---------- */
+function renderRequests(){
+  const card = $("reqCard");
+  if(!AVAILABLE.length && !PENDING.length){ card.style.display = "none"; return; }
+  card.style.display = "";
+  $("reqToggle").style.display = AVAILABLE.length ? "" : "none";
+  drawReqList("");
+  $("reqPending").textContent = PENDING.length
+    ? "Awaiting our quote: " + PENDING.join(", ")
+    : "";
+}
+
+function drawReqList(filter){
+  const f = (filter || "").toLowerCase();
+  const list = AVAILABLE.filter(p => !f || p.name.toLowerCase().includes(f));
+  $("reqList").innerHTML = list.length
+    ? list.map((p,i) => `<div class="chk">
+        <input type="checkbox" id="rq${i}" data-name="${p.name.replace(/"/g,'&quot;')}"
+               data-sku="${p.sku}">
+        <label for="rq${i}">${p.name}</label></div>`).join("")
+    : `<div class="sub" style="padding:10px 2px">Nothing else matches that.</div>`;
+}
+
+$("reqToggle").onclick = () => {
+  const b = $("reqBody");
+  const open = b.style.display !== "none";
+  b.style.display = open ? "none" : "";
+  $("reqToggle").textContent = open ? "Browse range" : "Close";
+};
+$("reqFilter").addEventListener("input", e => drawReqList(e.target.value));
+
+$("reqSend").onclick = async () => {
+  const items = [];
+  $("reqList").querySelectorAll("input:checked").forEach(c =>
+    items.push({ name: c.dataset.name, sku: c.dataset.sku }));
+  const note = $("reqNote").value.trim();
+  if(note) items.push({ name: note.slice(0,120), sku: null });
+  if(!items.length){ say("reqMsg","Tick something first, or type what you need.","err"); return; }
+
+  $("reqSend").disabled = true;
+  try{
+    const d = await api({ action:"requestProduct", pin: PIN, items, note });
+    say("reqMsg", d.added
+        ? "Sent. We will quote these and add them to your list."
+        : (d.message || "Already on your pending list."), "ok");
+    PENDING = PENDING.concat(items.map(i => i.name));
+    $("reqNote").value = "";
+    $("reqList").querySelectorAll("input:checked").forEach(c => c.checked = false);
+    $("reqPending").textContent = "Awaiting our quote: " + PENDING.join(", ");
+  }catch(e){ say("reqMsg", e.message, "err"); }
+  finally{ $("reqSend").disabled = false; }
+};
 
 function recalc(){
   let ctns = 0, units = 0, amt = 0, any = false;
@@ -349,6 +433,7 @@ $("signout").onclick = (e) => {
   try{
     const d = await api({action:"login", pin: saved});
     PIN = saved; BUYER = d.buyer; PRODUCTS = d.products || [];
+    AVAILABLE = d.available || []; PENDING = d.pending || [];
     render();
   }catch(e){
     sessionStorage.removeItem("onx_pin");
