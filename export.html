@@ -252,8 +252,9 @@ function render(){
   $("rows").innerHTML = PRODUCTS.map(p => `
     <tr data-sku="${p.sku}">
       <td><div class="pcell">
-        ${p.image_url ? `<img class="thumb" src="${p.image_url}" alt="" loading="lazy"
-             onerror="this.style.display='none'">` : ``}
+        <img class="thumb" loading="lazy" alt=""
+             src="${p.image_url || ('/catalog-images/export/' + encodeURIComponent(p.sku) + '.jpg')}"
+             onerror="this.style.display='none'">
         <div><div class="nm">${p.name}</div><div class="sk">${p.sku} · MOQ ${p.moq_cartons}</div></div>
       </div></td>
       <td class="r hide">${p.units_per_carton}</td>
