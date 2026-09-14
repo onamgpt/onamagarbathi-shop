@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ship Onam Agarbathi worldwide — Onam Agarbathi Pvt. Ltd.</title>
+<meta name="description" content="Can't find Onam incense where you live? Tell us what you need and we post it to you at cost from Bengaluru.">
+<style>
+  :root{--ink:#2a1d10;--gold:#b0842c;--maroon:#7a1a16;--cream:#fdf7ec;--line:#e6dcc8}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);color:var(--ink);
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;line-height:1.55}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px 70px}
+  header{background:#1b1206;color:#f5ecd8;padding:26px 16px 24px;text-align:center}
+  header h1{margin:0 0 8px;font-size:25px;letter-spacing:.3px;font-weight:700}
+  header p{margin:0;font-size:14.5px;color:#d8c9a6;max-width:520px;margin-inline:auto}
+  .since{font-size:11px;letter-spacing:2.5px;color:#b0842c;margin-bottom:9px}
+  h2{font-size:17px;margin:26px 0 10px;color:var(--maroon)}
+  .steps{background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-top:20px}
+  .steps ol{margin:0;padding-left:20px;font-size:14px}
+  .steps li{margin-bottom:6px}
+  .steps b{color:var(--maroon)}
+  .note{background:#fdf3e0;border:1px solid #ecd9ae;border-radius:10px;padding:11px 13px;
+        font-size:13px;margin-top:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:6px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:11px;overflow:hidden;display:flex;flex-direction:column}
+  .card .imgwrap{aspect-ratio:1/1;background:#f3ece0;overflow:hidden}
+  .card img{width:100%;height:100%;object-fit:cover;display:block}
+  .card .b{padding:9px 10px 10px;display:flex;flex-direction:column;gap:5px;flex:1}
+  .nm{font-size:13.5px;font-weight:700;line-height:1.3}
+  .mt{font-size:11.5px;color:#8a7a60}
+  .qty{display:flex;align-items:center;gap:8px;margin-top:auto}
+  .qty button{width:30px;height:30px;border:1px solid var(--line);background:#fff;border-radius:7px;
+              font-size:17px;cursor:pointer;color:var(--maroon);line-height:1}
+  .qty input{width:46px;text-align:center;padding:5px;border:1px solid var(--line);border-radius:7px;font-size:14px}
+  label{display:block;font-size:12px;font-weight:700;margin:11px 0 4px;color:#5a4a30}
+  input[type=text],input[type=email],textarea,select{
+    width:100%;padding:10px;border:1px solid var(--line);border-radius:9px;font-size:15px;
+    background:#fff;font-family:inherit}
+  textarea{min-height:64px;resize:vertical}
+  .bar{position:sticky;bottom:0;background:#fff;border-top:2px solid var(--gold);
+       padding:11px 16px;margin:0 -16px;box-shadow:0 -3px 14px rgba(0,0,0,.08)}
+  .bar .row{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:3px}
+  .big{width:100%;padding:13px;border:none;border-radius:10px;background:var(--maroon);
+       color:#fff;font-size:15.5px;font-weight:700;cursor:pointer;margin-top:8px}
+  .big:disabled{background:#c3b59a;cursor:not-allowed}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px;background:#fff}
+  th,td{border:1px solid var(--line);padding:7px 9px;text-align:left}
+  th{background:#f6efe2;font-size:12px}
+  td.r,th.r{text-align:right}
+  .ok{background:#fff;border:2px solid var(--gold);border-radius:12px;padding:20px;text-align:center}
+  .ok .ref{font-size:21px;font-weight:800;color:var(--maroon);letter-spacing:1px;margin:8px 0}
+  footer{text-align:center;font-size:12px;color:#8a7a60;padding:22px 16px 0}
+  .err{color:#b3261e;font-size:13.5px;margin-top:8px;font-weight:600}
+</style>
+</head><body>
+
+<header>
+  <div class="since">ONAM AGARBATHI PVT. LTD. &middot; SINCE 1972</div>
+  <h1>We'll post it to you, wherever you are</h1>
+  <p>Can't find Onam where you live? Tell us what you need and we send it from
+     Bengaluru — at exactly what the post office charges us, nothing added.</p>
+</header>
+
+<div class="wrap">
+
+<div class="steps">
+  <ol>
+    <li>Choose what you want. <b>Nothing is charged now.</b></li>
+    <li>We pack it, weigh it and book the parcel.</li>
+    <li>We send you a payment link for the incense <b>plus the exact postage on the receipt</b>.</li>
+    <li>You pay, we ship, and the tracking number comes to you.</li>
+  </ol>
+</div>
+
+<div class="note">
+  <b>Minimum 900g of incense</b> — about 9 or 10 boxes. Below that the postage costs
+  more than what's inside it, which is no good for anybody.
+  Delivery is roughly 5–7 days to the Gulf and 7–12 days to the USA, UK, Europe or Australia.
+</div>
+
+<h2>Choose your incense</h2>
+<div class="grid" id="grid"></div>
+
+<h2>Where should it go?</h2>
+<label>Full name</label><input type="text" id="f_name" autocomplete="name">
+<label>Email</label><input type="email" id="f_email" autocomplete="email">
+<label>Phone (with country code)</label><input type="text" id="f_phone" autocomplete="tel">
+<label>Street address</label><textarea id="f_address" autocomplete="street-address"></textarea>
+<label>City</label><input type="text" id="f_city" autocomplete="address-level2">
+<label>Postcode / ZIP</label><input type="text" id="f_postcode" autocomplete="postal-code">
+<label>Country</label>
+<select id="f_country">
+  <option value="">Select…</option>
+  <optgroup label="Gulf">
+    <option>United Arab Emirates</option><option>Saudi Arabia</option><option>Oman</option>
+    <option>Qatar</option><option>Kuwait</option><option>Bahrain</option>
+  </optgroup>
+  <optgroup label="Americas">
+    <option>United States</option><option>Canada</option><option>Trinidad and Tobago</option>
+    <option>Guyana</option><option>Suriname</option>
+  </optgroup>
+  <optgroup label="Europe">
+    <option>United Kingdom</option><option>Ireland</option><option>Germany</option>
+    <option>France</option><option>Netherlands</option><option>Italy</option><option>Switzerland</option>
+  </optgroup>
+  <optgroup label="Asia Pacific">
+    <option>Singapore</option><option>Malaysia</option><option>Australia</option>
+    <option>New Zealand</option><option>Japan</option><option>Hong Kong</option>
+  </optgroup>
+  <optgroup label="Africa &amp; Indian Ocean">
+    <option>Mauritius</option><option>Réunion</option><option>South Africa</option><option>Kenya</option>
+  </optgroup>
+  <optgroup label="South Asia">
+    <option>Sri Lanka</option><option>Nepal</option><option>Bangladesh</option>
+  </optgroup>
+  <option value="Other">Somewhere else — I'll say in the note</option>
+</select>
+<label>Anything we should know? (optional)</label><textarea id="f_note"></textarea>
+
+<div class="note" id="estBox" style="display:none">
+  <b>Roughly what postage will be:</b> <span id="estTxt"></span><br>
+  <span style="font-size:12px;color:#7a6a50">An estimate only. You'll be charged what the
+  post office receipt actually says — it may come out a little under or over.</span>
+</div>
+
+<div class="note" style="background:#f4f7f4;border-color:#d5e2d5">
+  <b>Customs.</b> Into the USA, orders under about $800 arrive duty-free.
+  The UK and EU will charge VAT when the parcel lands, and that part is paid by you,
+  not by us. We declare the true value on the customs form — always.
+</div>
+
+<div id="okBox"></div>
+
+</div>
+
+<div class="bar" id="bar">
+  <div class="wrap" style="padding:0">
+    <div class="row"><span id="cartCount">Nothing chosen yet</span><span id="cartWt">0g</span></div>
+    <div class="row"><span>Incense</span><span id="cartVal">₹0</span></div>
+    <button class="big" id="send" disabled>Choose at least 900g</button>
+    <div class="err" id="err"></div>
+  </div>
+</div>
+
+<footer>
+  Onam Agarbathi Pvt. Ltd., Bengaluru · Since 1972<br>
+  Posted from India by International Speed Post, tracked end to end.
+</footer>
+
+<script>
+var PRODUCTS = [
+  {id:"vaishak-premium",name:"Vaishak",brand:"Vaishak by Onam",cat:"premium",mrp:55,grams:100},
+  {id:"kesar-chandan",name:"Kesar Chandan",brand:"Onam",cat:"premium",mrp:80,grams:50},
+  {id:"vaishak",name:"Vaishak Special",brand:"Vaishak by Onam",cat:"premium",mrp:55,grams:100},
+  {id:"golden-buddha",name:"Golden Buddha",brand:"Onam",cat:"premium",mrp:75,grams:50},
+  {id:"ganesh-flora",name:"Ganesh Flora",brand:"Onam",cat:"premium",mrp:65,grams:80},
+  {id:"scentsational",name:"Scentsational",brand:"Onam",cat:"premium",mrp:55,grams:90},
+  {id:"lavender",name:"Lavender Premium",brand:"Onam",cat:"premium",mrp:55,grams:90},
+  {id:"vismaya-rose",name:"Vismaya Rose",brand:"Onam Vismaya",cat:"premium",mrp:55,grams:90},
+  {id:"serenity",name:"Serenity",brand:"Onam",cat:"premium",mrp:55,grams:90},
+  {id:"ocean",name:"Ocean",brand:"Onam",cat:"premium",mrp:55,grams:90},
+  {id:"suprasandal",name:"Suprasandal",brand:"Onam",cat:"premium",mrp:55,grams:90},
+  {id:"black-gem",name:"Black Gem",brand:"Onam",cat:"premium",mrp:55,grams:100},
+  {id:"surabhi",name:"Surabhi",brand:"Onam",cat:"premium",mrp:55,grams:90},
+  {id:"nagarjuna-flora",name:"Nagarjuna Flora",brand:"Onam",cat:"premium",mrp:20,grams:25},
+  {id:"musk-100",name:"Musk 100 Sticks",brand:"Onam",cat:"economy",mrp:55,grams:90},
+  {id:"chandan-cones",name:"Chandan Cones",brand:"Onam",cat:"cones",mrp:40,grams:50},
+  {id:"prasadam-cones",name:"Prasadam Cones",brand:"Onam",cat:"cones",mrp:40,grams:50},
+  {id:"royal-cones",name:"Royal Cones",brand:"Onam",cat:"cones",mrp:40,grams:50},
+  {id:"onam-cones",name:"Onam Cones",brand:"Onam",cat:"cones",mrp:40,grams:50},
+  {id:"gulab-cones",name:"Gulab Cones",brand:"Onam",cat:"cones",mrp:40,grams:50},
+  {id:"mysore-sandal-cones",name:"Mysore Royal Sandal Cones",brand:"Onam",cat:"cones",mrp:40,grams:50},
+  {id:"kalash-cones",name:"Kalash Cones",brand:"Onam",cat:"cones",mrp:40,grams:50},
+  {id:"black-gem-cones",name:"Black Gem Cones",brand:"Onam",cat:"cones",mrp:40,grams:50},
+  {id:"onam-dhoop",name:"Onam Dhoop Sticks",brand:"Onam",cat:"dhoop",mrp:40,grams:50},
+  {id:"black-gem-dhoop",name:"Black Gem Dhoop Sticks",brand:"Onam",cat:"dhoop",mrp:40,grams:50},
+  {id:"prasadam-dhoop",name:"Prasadam Dhoop Sticks",brand:"Onam",cat:"dhoop",mrp:40,grams:50},
+  {id:"mysore-sandal-dhoop",name:"Mysore Royal Sandal Dhoop",brand:"Onam",cat:"dhoop",mrp:40,grams:50},
+  {id:"royal-dhoop",name:"Royal Dhoop Sticks",brand:"Onam",cat:"dhoop",mrp:40,grams:50},
+  {id:"chandan-dhoop",name:"Chandan Dhoop Sticks",brand:"Onam",cat:"dhoop",mrp:40,grams:50},
+  {id:"gulab-dhoop",name:"Gulab Dhoop Sticks",brand:"Onam",cat:"dhoop",mrp:40,grams:50},
+  {id:"kalash-dhoop",name:"Kalash Dhoop Sticks",brand:"Onam",cat:"dhoop",mrp:40,grams:50},
+  {id:"mysore-sandal-115",name:"Mysore Sandal 115gm",brand:"Onam",cat:"premium",mrp:65,grams:115},
+  {id:"onam-sandal",name:"Onam Sandal",brand:"Onam",cat:"premium",mrp:65,grams:80},
+  {id:"onam-sandal-45",name:"Onam Sandal 45g",brand:"Onam",cat:"premium",mrp:30,grams:45}
+];
+var MIN = 900;
+
+// Indicative EMS postage. First 250g plus a per-250g step, GST added. These are
+// only ever shown as an estimate — the invoice uses the real receipt.
+var ZONES = [
+  {k:"gulf",  base:520, step:70,  label:"Gulf",
+   c:["United Arab Emirates","Saudi Arabia","Oman","Qatar","Kuwait","Bahrain"]},
+  {k:"saarc", base:485, step:35,  label:"South Asia",
+   c:["Sri Lanka","Nepal","Bangladesh"]},
+  {k:"apac",  base:630, step:120, label:"Asia Pacific",
+   c:["Singapore","Malaysia","Hong Kong","Japan","Australia","New Zealand"]},
+  {k:"ukeu",  base:900, step:130, label:"UK & Europe",
+   c:["United Kingdom","Ireland","Germany","France","Netherlands","Italy","Switzerland"]},
+  {k:"us",    base:865, step:100, label:"Americas",
+   c:["United States","Canada","Trinidad and Tobago","Guyana","Suriname"]},
+  {k:"afr",   base:820, step:130, label:"Africa & Indian Ocean",
+   c:["Mauritius","R\u00e9union","South Africa","Kenya"]}
+];
+function zoneFor(country){
+  for(var i=0;i<ZONES.length;i++){ if(ZONES[i].c.indexOf(country)>=0) return ZONES[i]; }
+  return null;
+}
+// Packing adds real weight. Ignoring it makes every estimate read low.
+function billableGrams(g){ return g + 180; }
+function estimate(country,g){
+  var z=zoneFor(country); if(!z) return null;
+  var slabs=Math.max(1,Math.ceil(billableGrams(g)/250));
+  var rs=(z.base + (slabs-1)*z.step)*1.18;
+  return {lo:Math.round(rs*0.9/50)*50, hi:Math.round(rs*1.15/50)*50, label:z.label};
+}
+
+var cart={};
+var $=function(id){return document.getElementById(id);};
+var inr=function(n){return "\u20b9"+Math.round(n).toLocaleString("en-IN");};
+
+function draw(){
+  var g=$("grid"), h="";
+  PRODUCTS.forEach(function(p){
+    h+='<div class="card"><div class="imgwrap">'+
+       '<img loading="lazy" alt="" src="/catalog-images/'+p.id+'.jpg" '+
+       'onerror="this.parentNode.style.display=\'none\'">'+
+       '</div><div class="b">'+
+       '<div class="nm">'+p.name+'</div>'+
+       '<div class="mt">'+p.grams+'g &middot; '+inr(p.mrp)+'</div>'+
+       '<div class="qty">'+
+       '<button data-d="-1" data-id="'+p.id+'">\u2212</button>'+
+       '<input type="text" inputmode="numeric" id="q_'+p.id+'" value="0">'+
+       '<button data-d="1" data-id="'+p.id+'">+</button>'+
+       '</div></div></div>';
+  });
+  g.innerHTML=h;
+  g.addEventListener("click",function(e){
+    var b=e.target.closest("button[data-id]"); if(!b) return;
+    var id=b.getAttribute("data-id"), d=parseInt(b.getAttribute("data-d"),10);
+    cart[id]=Math.max(0,(cart[id]||0)+d);
+    $("q_"+id).value=cart[id]; tally();
+  });
+  g.addEventListener("input",function(e){
+    if(e.target.tagName!=="INPUT") return;
+    var id=e.target.id.slice(2);
+    cart[id]=Math.max(0,parseInt(e.target.value,10)||0); tally();
+  });
+}
+
+function tally(){
+  var g=0,v=0,n=0;
+  PRODUCTS.forEach(function(p){
+    var q=cart[p.id]||0; if(!q) return;
+    g+=p.grams*q; v+=p.mrp*q; n+=q;
+  });
+  $("cartWt").textContent=g+"g";
+  $("cartVal").textContent=inr(v);
+  $("cartCount").textContent = n? (n+" box"+(n===1?"":"es")) : "Nothing chosen yet";
+  var country=$("f_country").value;
+  var e=country?estimate(country,g):null;
+  if(e&&g>0){
+    $("estBox").style.display="block";
+    $("estTxt").textContent=inr(e.lo)+"\u2013"+inr(e.hi)+" to "+country+" ("+e.label+")";
+  } else { $("estBox").style.display="none"; }
+  var ok=g>=MIN;
+  $("send").disabled=!ok;
+  $("send").textContent = ok ? ("Send this request \u00b7 "+inr(v)+" of incense")
+                             : ("Choose at least 900g \u2014 "+(MIN-g)+"g to go");
+  return {g:g,v:v};
+}
+
+draw();
+$("f_country").addEventListener("change",tally);
+tally();
+
+$("send").addEventListener("click",function(){
+  $("err").textContent="";
+  var t=tally();
+  if(t.g<MIN){ $("err").textContent="Minimum is 900g."; return; }
+  var cust={ name:$("f_name").value, email:$("f_email").value, phone:$("f_phone").value,
+             address:$("f_address").value, city:$("f_city").value,
+             postcode:$("f_postcode").value, country:$("f_country").value };
+  var need=[["name","your name"],["email","your email"],["address","the street address"],
+            ["city","the city"],["country","the country"]];
+  for(var i=0;i<need.length;i++){
+    if(!String(cust[need[i][0]]||"").trim()){ $("err").textContent="Please fill in "+need[i][1]+"."; return; }
+  }
+  if(cust.email.indexOf("@")<0){ $("err").textContent="That email doesn't look right."; return; }
+  var lines=[];
+  PRODUCTS.forEach(function(p){
+    var q=cart[p.id]||0;
+    if(q) lines.push({id:p.id,name:p.name,qty:q,grams:p.grams,price:p.mrp});
+  });
+  var btn=$("send"); btn.disabled=true; btn.textContent="Sending\u2026";
+  fetch("/.netlify/functions/intl-order",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({lines:lines,customer:cust,note:$("f_note").value})})
+   .then(function(r){return r.json();})
+   .then(function(j){
+      if(!j.ok){ $("err").textContent=j.error||"Something went wrong. Please try again.";
+                 btn.disabled=false; tally(); return; }
+      $("okBox").innerHTML='<div class="ok"><div style="font-size:13px;color:#7a6a50">'+
+        'Your request is with us</div><div class="ref">'+j.ref+'</div>'+
+        '<div style="font-size:14px">We\'ll pack and weigh it, then email you a payment link '+
+        'for the incense plus the exact postage. Nothing has been charged.</div></div>';
+      $("bar").style.display="none";
+      $("okBox").scrollIntoView({behavior:"smooth",block:"center"});
+   })
+   .catch(function(){ $("err").textContent="Network problem. Please try again.";
+                      btn.disabled=false; tally(); });
+});
+</script>
+</body></html>
