@@ -80,7 +80,11 @@ export default async () => {
       // Meta wants "<amount> <currency>". mrp is the consumer price; price is
       // the per-case figure and would be wrong to show a shopper.
       price: (Number(p.mrp) || 0).toFixed(2) + " INR",
-      link: SITE + "/",
+      // Deep link to the product itself. Every row pointing at the homepage
+      // reads as a low-quality catalogue to Meta, and a shopper who taps a
+      // product tag should land on that product, not the shop front. The src
+      // tag lets the visit be attributed like any other campaign arrival.
+      link: SITE + "/?product=" + encodeURIComponent(p.id) + "&src=meta",
       image_link: images[p.id] || "",
       brand: p.brand || "Onam",
       product_type: p.cat || "incense",
