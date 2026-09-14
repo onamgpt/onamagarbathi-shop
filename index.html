@@ -473,6 +473,27 @@ var VISIT_SOURCE = (function(){
     return "referral";
   }catch(e){ return "unknown"; }
 })();
+// A tagged arrival came off a QR or a shared link. Tell the server once, so
+// the state it was scanned in can be counted. Fire-and-forget: this must never
+// delay or break the page, and no identifier of any kind is sent.
+(function(){
+  try{
+    var p = new URLSearchParams(location.search);
+    var tag = p.get("src") || p.get("utm_source") || "";
+    if(!tag) return;
+    if(sessionStorage.getItem("rk_scan_logged")) return;
+    sessionStorage.setItem("rk_scan_logged","1");
+    var payload = JSON.stringify({ src: tag,
+      campaign: p.get("utm_campaign") || "", product: p.get("product") || "" });
+    if(navigator.sendBeacon){
+      navigator.sendBeacon("/.netlify/functions/scan-log",
+        new Blob([payload],{type:"application/json"}));
+    } else {
+      fetch("/.netlify/functions/scan-log",{method:"POST",
+        headers:{"Content-Type":"application/json"},body:payload,keepalive:true}).catch(function(){});
+    }
+  }catch(e){}
+})();
 var VISIT_CAMPAIGN = (function(){
   try{ return sessionStorage.getItem("rk_campaign") || ""; }catch(e){ return ""; }
 })();
