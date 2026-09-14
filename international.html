@@ -73,6 +73,9 @@
 </div>
 
 <div class="note">
+  <span style="display:block;margin-bottom:6px">Prices are in Indian rupees and that is
+  what you are charged. Once you pick a country we show an approximate figure in your own
+  currency so you can judge it — your bank sets the final rate.</span>
   <b>Minimum 900g of incense</b> — about 9 or 10 boxes. Below that the postage costs
   more than what's inside it, which is no good for anybody.
   Delivery is roughly 5–7 days to the Gulf and 7–12 days to the USA, UK, Europe or Australia.
@@ -215,6 +218,40 @@ function estimate(country,g){
   return {lo:Math.round(rs*0.9/50)*50, hi:Math.round(rs*1.15/50)*50, label:z.label};
 }
 
+// Prices are set and charged in rupees. Showing an approximate local figure is
+// a courtesy so a buyer abroad can judge the cost at a glance — it is never the
+// amount charged, and it says so. Live rate where available, fallback table
+// where not, because a missing network must not blank out every price.
+var CCY={
+  "United Arab Emirates":"AED","Saudi Arabia":"SAR","Oman":"OMR","Qatar":"QAR",
+  "Kuwait":"KWD","Bahrain":"BHD",
+  "United States":"USD","Canada":"CAD","Trinidad and Tobago":"TTD",
+  "Guyana":"GYD","Suriname":"USD",
+  "United Kingdom":"GBP","Ireland":"EUR","Germany":"EUR","France":"EUR",
+  "Netherlands":"EUR","Italy":"EUR","Switzerland":"CHF",
+  "Singapore":"SGD","Malaysia":"MYR","Australia":"AUD","New Zealand":"NZD",
+  "Japan":"JPY","Hong Kong":"HKD",
+  "Mauritius":"MUR","R\u00e9union":"EUR","South Africa":"ZAR","Kenya":"KES",
+  "Sri Lanka":"LKR","Nepal":"NPR","Bangladesh":"BDT"
+};
+// Units of foreign currency per 1 INR. Indicative only.
+var FALLBACK={USD:0.0113,EUR:0.0104,GBP:0.0089,AED:0.0415,SAR:0.0424,QAR:0.0411,
+  OMR:0.0043,KWD:0.0035,BHD:0.0043,CAD:0.0156,AUD:0.0172,NZD:0.0189,SGD:0.0146,
+  MYR:0.0476,JPY:1.72,HKD:0.0880,CHF:0.0090,ZAR:0.204,KES:1.46,MUR:0.520,
+  LKR:3.42,NPR:1.60,BDT:1.38,TTD:0.0765,GYD:2.36};
+var RATES=null;
+fetch("https://open.er-api.com/v6/latest/INR")
+  .then(function(r){return r.json();})
+  .then(function(j){ if(j&&j.rates) { RATES=j.rates; tally(); } })
+  .catch(function(){});
+function local(inr,country){
+  var c=CCY[country]; if(!c) return "";
+  var r=(RATES&&RATES[c])||FALLBACK[c]; if(!r) return "";
+  var v=inr*r;
+  var shown = v>=100 ? Math.round(v) : Math.round(v*10)/10;
+  return " (\u2248 "+c+" "+shown.toLocaleString("en-US")+")";
+}
+
 var cart={};
 var $=function(id){return document.getElementById(id);};
 var inr=function(n){return "\u20b9"+Math.round(n).toLocaleString("en-IN");};
@@ -262,14 +299,16 @@ function tally(){
     var q=cart[p.id]||0; if(!q) return;
     g+=p.grams*q; v+=p.mrp*q; n+=q;
   });
+  var ctry=$("f_country").value;
   $("cartWt").textContent=g+"g";
-  $("cartVal").textContent=inr(v);
+  $("cartVal").textContent=inr(v)+local(v,ctry);
   $("cartCount").textContent = n? (n+" box"+(n===1?"":"es")) : "Nothing chosen yet";
-  var country=$("f_country").value;
+  var country=ctry;
   var e=country?estimate(country,g):null;
   if(e&&g>0){
     $("estBox").style.display="block";
-    $("estTxt").textContent=inr(e.lo)+"\u2013"+inr(e.hi)+" to "+country+" ("+e.label+")";
+    $("estTxt").textContent=inr(e.lo)+"\u2013"+inr(e.hi)+local(e.hi,country)+
+      " to "+country+" ("+e.label+")";
   } else { $("estBox").style.display="none"; }
   var ok=g>=MIN;
   $("send").disabled=!ok;
