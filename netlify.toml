@@ -22,6 +22,16 @@
   to = "/international.html"
   status = 200
 
+[[redirects]]
+  from = "/vamana"
+  to = "/vamana.html"
+  status = 200
+
+[[redirects]]
+  from = "/vamana-admin"
+  to = "/vamana-admin.html"
+  status = 200
+
 # SPA / single-page fallback: serve index.html for any unmatched route.
 # NOTE: never write a redirect whose `from` starts with /.netlify — that path
 # is reserved by Netlify and causes "Invalid /.netlify path in redirect source".
