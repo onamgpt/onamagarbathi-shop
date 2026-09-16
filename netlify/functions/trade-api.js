@@ -311,6 +311,49 @@ export default async (req) => {
       return J({ ok: true, order, rep, mail });
     }
 
+    // ---- collections: the rep's side --------------------------------------
+    // A rep records what he collected. It is a claim, not a fact: it does not
+    // settle the order until the office confirms it.
+    if (action === "repCollect") {
+      const rep = await repFromPin(body.pin);
+      if (!rep) return J({ error: "Access code not recognised" }, 401);
+      const amount = Number(body.amount || 0);
+      if (!(amount > 0)) return J({ error: "Enter an amount" }, 400);
+
+      const rows = await sb("GET", "/trade_orders?order_no=eq." + q(String(body.order_no)) +
+        "&rep_code=eq." + q(rep.code) + "&select=*");
+      if (!rows.length) return J({ error: "Order not found" }, 404);
+      const o = rows[0];
+
+      await sb("POST", "/collection_claims", [{
+        order_no: o.order_no, side: "rep", actor: rep.code, amount,
+        mode: (body.mode || "").slice(0, 20), reference: (body.reference || "").slice(0, 60),
+        note: (body.note || "").slice(0, 300)
+      }]);
+
+      const claimed = r2(Number(o.claimed_amount || 0) + amount);
+      const confirmed = Number(o.confirmed_amount || 0);
+      const total = Number(o.grand_total || 0);
+      // Recording a fresh collection clears a standing dispute: there is now
+      // something new for the office to look at.
+      const upd = await sb("PATCH", "/trade_orders?order_no=eq." + q(o.order_no), {
+        claimed_amount: claimed, disputed: false, dispute_note: null,
+        last_claim_at: new Date().toISOString(),
+        collection_status: confirmed >= total - 0.5 ? "paid" : "claimed"
+      }, "return=representation");
+      return J({ ok: true, order: upd[0], awaiting_confirmation: r2(claimed - confirmed) });
+    }
+
+    if (action === "repOrders") {
+      const rep = await repFromPin(body.pin);
+      if (!rep) return J({ error: "Access code not recognised" }, 401);
+      const orders = await sb("GET", "/trade_orders?rep_code=eq." + q(rep.code) +
+        "&select=order_no,party_name,party_town,channel,grand_total,claimed_amount," +
+        "confirmed_amount,collection_status,disputed,dispute_note,created_at" +
+        "&order=id.desc&limit=60");
+      return J({ ok: true, orders });
+    }
+
     // ---- admin ------------------------------------------------------------
     const admin = () => ADMIN_PIN() && body.adminPin && String(body.adminPin) === ADMIN_PIN();
 
@@ -371,23 +414,52 @@ export default async (req) => {
       return J({ ok: true });
     }
 
-    if (action === "adminRecordCollection") {
+    // The office side. Confirming settles money; disputing sends it back to
+    // the rep to produce proof, and never silently reduces what he claimed.
+    if (action === "adminConfirmCollection") {
       if (!admin()) return J({ error: "Not authorised" }, 401);
       if (!body.order_no) return J({ error: "Missing order_no" }, 400);
       const rows = await sb("GET",
-        "/trade_orders?order_no=eq." + q(body.order_no) + "&select=grand_total,collected_amount");
+        "/trade_orders?order_no=eq." + q(body.order_no) + "&select=*");
       if (!rows.length) return J({ error: "Order not found" }, 404);
-      const total = Number(rows[0].grand_total || 0);
-      const already = Number(rows[0].collected_amount || 0);
+      const o = rows[0];
+      const total = Number(o.grand_total || 0);
+      const claimed = Number(o.claimed_amount || 0);
+
+      if (body.decision === "dispute") {
+        const upd = await sb("PATCH", "/trade_orders?order_no=eq." + q(o.order_no), {
+          disputed: true,
+          dispute_note: (body.note || "Not received — please send proof").slice(0, 300),
+          collection_status: "disputed"
+        }, "return=representation");
+        return J({ ok: true, order: upd[0] });
+      }
+
       const add = Number(body.amount || 0);
       if (!(add > 0)) return J({ error: "Enter an amount" }, 400);
+      await sb("POST", "/collection_claims", [{
+        order_no: o.order_no, side: "office", actor: "office", amount: add,
+        mode: (body.mode || "").slice(0, 20), reference: (body.reference || "").slice(0, 60),
+        note: (body.note || "").slice(0, 300)
+      }]);
 
-      const now = r2(already + add);
-      const status = now >= total - 0.5 ? "paid" : (now > 0 ? "part" : "pending");
-      const upd = await sb("PATCH", "/trade_orders?order_no=eq." + q(body.order_no),
-        { collected_amount: now, collection_status: status,
-          collected_at: new Date().toISOString() }, "return=representation");
-      return J({ ok: true, order: upd[0], outstanding: r2(total - now) });
+      const confirmed = r2(Number(o.confirmed_amount || 0) + add);
+      const status = confirmed >= total - 0.5 ? "paid"
+                   : (confirmed > 0 ? "part" : (claimed > 0 ? "claimed" : "pending"));
+      const upd = await sb("PATCH", "/trade_orders?order_no=eq." + q(o.order_no), {
+        confirmed_amount: confirmed, collected_amount: confirmed,
+        collection_status: status, collected_at: new Date().toISOString(),
+        disputed: false, dispute_note: null
+      }, "return=representation");
+      return J({ ok: true, order: upd[0], outstanding: r2(total - confirmed),
+                 unconfirmed: r2(Math.max(0, claimed - confirmed)) });
+    }
+
+    if (action === "adminCollectionHistory") {
+      if (!admin()) return J({ error: "Not authorised" }, 401);
+      const rows = await sb("GET", "/collection_claims?order_no=eq." +
+        q(String(body.order_no)) + "&select=*&order=id.asc");
+      return J({ ok: true, claims: rows });
     }
 
     if (action === "adminUpdateOrder") {
