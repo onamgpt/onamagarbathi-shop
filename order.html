@@ -444,9 +444,37 @@ function drawColl(orders){
             <option value="other">Other</option></select></div>
         <div style="flex:1;min-width:110px"><label>Reference</label>
           <input class="cRef" placeholder="Cheque / UTR"></div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:9px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:150px"><label>Photo of receipt (optional)</label>
+          <input class="cPic" type="file" accept="image/*" capture="environment"
+                 style="padding:7px;font-size:13px"></div>
         <button class="cSave" style="padding:10px 16px;font-size:14px">Record</button>
-      </div>`}
+      </div>
+      <div class="sub cPicMsg" style="margin-top:6px"></div>`}
     </div>`;}).join("");
+}
+
+// Phone photos are far too big to post raw, so shrink before upload.
+function shrink(file){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onload=()=>{
+      const img=new Image();
+      img.onload=()=>{
+        const max=1400;
+        const s=Math.min(1,max/Math.max(img.width,img.height));
+        const c=document.createElement("canvas");
+        c.width=Math.round(img.width*s); c.height=Math.round(img.height*s);
+        c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+        res(c.toDataURL("image/jpeg",0.72));
+      };
+      img.onerror=()=>rej(new Error("Could not read that image"));
+      img.src=fr.result;
+    };
+    fr.onerror=()=>rej(new Error("Could not read that file"));
+    fr.readAsDataURL(file);
+  });
 }
 
 $("collList").addEventListener("click",async e=>{
@@ -455,9 +483,25 @@ $("collList").addEventListener("click",async e=>{
   const amt=card.querySelector(".cAmt").value;
   if(!(Number(amt)>0)){ say("collMsg","Enter the amount collected","err"); return; }
   e.target.disabled=true;
+
+  let proofUrl=null;
+  const pic=card.querySelector(".cPic");
+  const picMsg=card.querySelector(".cPicMsg");
+  try{
+    if(pic && pic.files && pic.files[0]){
+      picMsg.textContent="Uploading photo…";
+      const data=await shrink(pic.files[0]);
+      const u=await api({action:"uploadProof",pin:PIN,order_no:card.dataset.no,data});
+      proofUrl=u.url; picMsg.textContent="Photo attached.";
+    }
+  }catch(err){
+    picMsg.textContent="Photo could not be attached — recording without it.";
+  }
+
   try{
     await api({action:"repCollect",pin:PIN,order_no:card.dataset.no,amount:amt,
-      mode:card.querySelector(".cMode").value,reference:card.querySelector(".cRef").value});
+      mode:card.querySelector(".cMode").value,reference:card.querySelector(".cRef").value,
+      proof_url:proofUrl});
     const d=await api({action:"repOrders",pin:PIN});
     drawColl(d.orders||[]);
     say("collMsg","Recorded. It shows as awaiting confirmation until the office checks it.","ok");
