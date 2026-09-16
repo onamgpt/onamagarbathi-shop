@@ -68,3 +68,4 @@ try {
   console.error("[migrate] FAILED:", e.message);
   process.exit(1);
 }
+// migration runner enabled
