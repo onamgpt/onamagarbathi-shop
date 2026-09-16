@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Trade Order — Onam Agarbathi</title>
+<style>
+  :root{--ink:#1c1917;--muted:#78716c;--line:#e7e5e4;--bg:#faf9f7;
+        --gold:#9a6b2f;--gold-soft:#f5efe4;--ok:#166534;--err:#9f1239}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1000px;margin:0 auto;padding:18px 14px 60px}
+  h1{font-size:19px;margin:0}
+  .sub{color:var(--muted);font-size:13px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:14px}
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+        color:var(--muted);margin-bottom:5px}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;
+        font-size:16px;font-family:inherit;background:#fff;color:var(--ink)}
+  input:focus,textarea:focus{outline:2px solid var(--gold);outline-offset:-1px;border-color:transparent}
+  button{background:var(--ink);color:#fff;border:0;border-radius:7px;padding:12px 20px;
+         font-size:15px;font-weight:600;cursor:pointer;font-family:inherit}
+  button:disabled{opacity:.45;cursor:default}
+  button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  .msg{padding:10px 13px;border-radius:6px;font-size:14px;margin-top:11px;display:none}
+  .msg.err{background:#fff1f2;color:var(--err);display:block}
+  .msg.ok{background:#f0fdf4;color:var(--ok);display:block}
+  .grid{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+     color:var(--muted);font-weight:600;padding:9px 6px;border-bottom:1px solid var(--line)}
+  td{padding:9px 6px;border-bottom:1px solid #f5f5f4;vertical-align:middle}
+  th.r,td.r{text-align:right}
+  .nm{font-weight:600;font-size:14px}
+  .sk{font-size:11px;color:var(--muted)}
+  .strike{color:var(--muted);text-decoration:line-through;font-size:12px}
+  .net{font-weight:600;font-variant-numeric:tabular-nums}
+  .amt{font-variant-numeric:tabular-nums;white-space:nowrap}
+  input.ctn{width:70px;padding:8px;text-align:center;font-weight:600}
+  .tag{display:inline-block;background:var(--gold-soft);color:#6b4a1e;border:1px solid #e8dcc4;
+       border-radius:999px;padding:1px 8px;font-size:10px;font-weight:700;margin-left:6px}
+  .foot{position:sticky;bottom:0;background:#fff;border-top:2px solid var(--ink);padding:13px 16px;
+        display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+        margin:0 -18px -18px;border-radius:0 0 10px 10px}
+  .tot{font-size:21px;font-weight:700;font-variant-numeric:tabular-nums}
+  .tot small{display:block;font-size:11px;font-weight:500;color:var(--muted);
+             text-transform:uppercase;letter-spacing:.07em}
+  .sum{margin-left:auto;min-width:250px;font-size:14px}
+  .sum div{display:flex;justify-content:space-between;padding:3px 0}
+  .sum .big{border-top:2px solid var(--ink);margin-top:7px;padding-top:9px;
+            font-size:17px;font-weight:700}
+  #gate{max-width:360px;margin:13vh auto 0}
+  .mark{text-align:center;margin-bottom:24px}
+  .mark .n{font-size:25px;letter-spacing:.22em;color:var(--gold);font-weight:600}
+  .mark .t{font-size:11px;letter-spacing:.3em;color:var(--muted);text-transform:uppercase;margin-top:6px}
+  @media print{ body{background:#fff} .noprint{display:none!important} .card{border:0;padding:0} }
+  @media(max-width:660px){ th.hide,td.hide{display:none} .wrap{padding:13px 11px 44px} }
+</style>
+</head>
+<body>
+
+<div id="gate" class="wrap">
+  <div class="mark"><div class="n">ONAM</div><div class="t">Trade Order Book</div></div>
+  <div class="card">
+    <label for="pin">Access code</label>
+    <input id="pin" type="text" inputmode="numeric" autocomplete="off" maxlength="12"
+           placeholder="Enter your code">
+    <div style="height:13px"></div>
+    <button id="enter" style="width:100%">Enter</button>
+    <div id="gateMsg" class="msg"></div>
+    <p class="sub" style="text-align:center;margin:15px 0 0">For sales staff only.</p>
+  </div>
+</div>
+
+<div id="app" class="wrap" style="display:none">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;
+              padding-bottom:14px;border-bottom:1px solid var(--line);margin-bottom:16px;flex-wrap:wrap">
+    <div><h1 id="repName">—</h1><div class="sub" id="repMeta">—</div></div>
+    <a href="#" id="signout" class="sub noprint">Sign out</a>
+  </div>
+
+  <div class="card noprint">
+    <label for="party">Party / shop name</label>
+    <input id="party" list="parties" autocomplete="off" placeholder="Shop name">
+    <datalist id="parties"></datalist>
+    <div style="height:11px"></div>
+    <div class="grid">
+      <div><label>Town</label><input id="town"></div>
+      <div><label>Phone</label><input id="phone" inputmode="tel"></div>
+      <div><label>GSTIN (optional)</label><input id="gstin" maxlength="15"
+             style="text-transform:uppercase"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead><tr>
+        <th>Product</th>
+        <th class="r hide">Doz/Ctn</th>
+        <th class="r">Rate/Doz</th>
+        <th class="r">Ctns</th>
+        <th class="r hide">Dozens</th>
+        <th class="r">Amount</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="foot">
+      <div class="tot">
+        <small><span id="sumCtn">0</span> cartons</small>
+        ₹ <span id="sumNet">0.00</span>
+      </div>
+      <button id="place" disabled>Place order</button>
+    </div>
+  </div>
+
+  <div class="card noprint">
+    <div class="sum">
+      <div><span>Gross at list</span><span id="sGross">0.00</span></div>
+      <div><span>Less discount</span><span id="sDisc">0.00</span></div>
+      <div><span>Taxable value</span><span id="sNet">0.00</span></div>
+      <div><span>GST 5%</span><span id="sGst">0.00</span></div>
+      <div class="big"><span>Order value</span><span id="sTotal">0.00</span></div>
+    </div>
+  </div>
+
+  <div class="card noprint">
+    <label for="notes">Remarks (optional)</label>
+    <textarea id="notes" rows="2" placeholder="Delivery instructions, transport, part despatch…"></textarea>
+    <div id="appMsg" class="msg"></div>
+  </div>
+</div>
+
+<div id="ackWrap" class="wrap" style="display:none">
+  <div class="card" id="ack"></div>
+  <div class="noprint" style="display:flex;gap:10px;justify-content:center">
+    <button onclick="window.print()">Print / Save PDF</button>
+    <button class="ghost" id="newBtn">New order</button>
+  </div>
+</div>
+
+<script>
+const API="/.netlify/functions/trade-api";
+let PIN="", REP=null, PRODUCTS=[], PARTIES=[];
+const $=id=>document.getElementById(id);
+const inr=n=>Number(n||0).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function say(el,t,k){const m=$(el);m.textContent=t;m.className="msg "+(k||"");if(!t)m.className="msg";}
+
+async function api(p){
+  const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(p)});
+  const d=await r.json().catch(()=>({error:"Server did not respond"}));
+  if(!r.ok) throw new Error(d.error||"Request failed");
+  return d;
+}
+
+async function enter(){
+  const pin=$("pin").value.trim(); if(!pin)return;
+  $("enter").disabled=true; say("gateMsg","");
+  try{
+    const d=await api({action:"login",pin});
+    PIN=pin; REP=d.rep; PRODUCTS=d.products||[]; PARTIES=d.parties||[];
+    sessionStorage.setItem("ont_pin",pin);
+    render();
+  }catch(e){ say("gateMsg",e.message,"err"); }
+  finally{ $("enter").disabled=false; }
+}
+$("enter").onclick=enter;
+$("pin").addEventListener("keydown",e=>{if(e.key==="Enter")enter();});
+
+function render(){
+  $("gate").style.display="none"; $("app").style.display="";
+  $("repName").textContent=REP.name;
+  $("repMeta").textContent=[REP.code,REP.territory].filter(Boolean).join("  ·  ");
+
+  $("parties").innerHTML=PARTIES.map(p=>`<option value="${esc(p.party_name)}">`).join("");
+
+  $("rows").innerHTML=PRODUCTS.map(p=>{
+    const disc = p.trade_disc_pct + (p.scheme_pct?p.scheme_pct:0);
+    const tag = p.scheme_pct
+      ? `<span class="tag">SCHEME ${p.scheme_pct}%</span>` : "";
+    return `<tr data-sku="${esc(p.sku)}">
+      <td><div class="nm">${esc(p.name)}${tag}</div>
+          <div class="sk">${p.doz_per_ctn} doz/ctn · ${p.trade_disc_pct}% trade${
+            p.scheme_pct?` + ${p.scheme_pct}% scheme`:""}</div></td>
+      <td class="r hide">${p.doz_per_ctn}</td>
+      <td class="r">
+        <div class="strike">${inr(p.rate_per_doz)}</div>
+        <div class="net">${inr(p.net_rate)}</div>
+      </td>
+      <td class="r"><input class="ctn" type="number" min="0" step="1" placeholder="0"
+            data-net="${p.net_rate}" data-list="${p.rate_per_doz}"
+            data-doz="${p.doz_per_ctn}" data-moq="${p.moq_cartons}"
+            data-gst="${p.gst_pct}"></td>
+      <td class="r amt hide" data-doz>0</td>
+      <td class="r amt" data-amount>0.00</td>
+    </tr>`;}).join("");
+
+  $("rows").addEventListener("input",recalc);
+  recalc();
+}
+
+// Autofill the rest of the party details once the name matches a past order.
+$("party").addEventListener("input",()=>{
+  const v=$("party").value.trim().toUpperCase();
+  const hit=PARTIES.find(p=>(p.party_name||"").toUpperCase()===v);
+  if(hit){
+    $("town").value=hit.party_town||"";
+    $("phone").value=hit.party_phone||"";
+    $("gstin").value=hit.party_gstin||"";
+  }
+});
+
+function recalc(){
+  let ctns=0,gross=0,net=0,gst=0,any=false;
+  $("rows").querySelectorAll("tr").forEach(tr=>{
+    const i=tr.querySelector("input.ctn");
+    const c=parseInt(i.value,10)||0;
+    const doz=Math.round(c*Number(i.dataset.doz)*100)/100;
+    const nAmt=Math.round(Number(i.dataset.net)*doz*100)/100;
+    const lAmt=Math.round(Number(i.dataset.list)*doz*100)/100;
+    tr.querySelector("[data-doz]").textContent=doz?doz.toLocaleString("en-IN"):"0";
+    tr.querySelector("[data-amount]").textContent=inr(nAmt);
+    const moq=Number(i.dataset.moq)||1;
+    i.style.borderColor=(c>0&&c<moq)?"var(--err)":"";
+    ctns+=c; gross+=lAmt; net+=nAmt;
+    gst+=Math.round(nAmt*Number(i.dataset.gst)/100*100)/100;
+    if(c>0)any=true;
+  });
+  gross=Math.round(gross*100)/100; net=Math.round(net*100)/100; gst=Math.round(gst*100)/100;
+  $("sumCtn").textContent=ctns.toLocaleString("en-IN");
+  $("sumNet").textContent=inr(net);
+  $("sGross").textContent=inr(gross);
+  $("sDisc").textContent="- "+inr(Math.round((gross-net)*100)/100);
+  $("sNet").textContent=inr(net);
+  $("sGst").textContent=inr(gst);
+  $("sTotal").textContent="₹ "+inr(Math.round((net+gst)*100)/100);
+  $("place").disabled=!any;
+}
+
+$("place").onclick=async()=>{
+  if(!$("party").value.trim()){ say("appMsg","Enter the party name first","err"); return; }
+  const lines=[];
+  $("rows").querySelectorAll("tr").forEach(tr=>{
+    const c=parseInt(tr.querySelector("input.ctn").value,10)||0;
+    if(c>0) lines.push({sku:tr.dataset.sku,cartons:c});
+  });
+  if(!lines.length)return;
+  $("place").disabled=true; say("appMsg","Placing the order…","ok");
+  try{
+    const d=await api({action:"placeOrder",pin:PIN,lines,
+      party:{name:$("party").value,town:$("town").value,
+             phone:$("phone").value,gstin:$("gstin").value},
+      notes:$("notes").value});
+    showAck(d.order,d.rep);
+  }catch(e){ say("appMsg",e.message,"err"); $("place").disabled=false; }
+};
+
+function showAck(o,rep){
+  const d=new Date(o.created_at||Date.now());
+  const dd=String(d.getDate()).padStart(2,"0")+"."+
+           String(d.getMonth()+1).padStart(2,"0")+"."+d.getFullYear();
+  const rows=o.lines.map(l=>`<tr>
+      <td>${esc(l.name)}</td>
+      <td class="r">${l.cartons}</td>
+      <td class="r">${l.dozens}</td>
+      <td class="r">${inr(l.list_rate)}</td>
+      <td class="r">${l.trade_pct}%${l.scheme_pct?" + "+l.scheme_pct+"%":""}</td>
+      <td class="r">${inr(l.net_rate)}</td>
+      <td class="r">${inr(l.amount)}</td></tr>`).join("");
+
+  $("ack").innerHTML=`
+    <h2 style="font-size:15px;letter-spacing:.16em;text-transform:uppercase;text-align:center;
+               margin:0 0 18px">Order Acknowledgement</h2>
+    <div style="display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:16px">
+      <div><strong>ONAM AGARBATHI PVT. LTD.</strong><br>Bangalore<br>
+           GSTIN: 29AAACO2213Q1Z8</div>
+      <div style="text-align:right"><strong>${esc(o.order_no)}</strong><br>${dd}<br>
+           Booked by ${esc(rep.name)}</div>
+    </div>
+    <div style="border:1px solid var(--line);border-radius:6px;padding:11px;margin-bottom:16px">
+      <div class="sub" style="text-transform:uppercase;letter-spacing:.08em;font-size:11px">Party</div>
+      <strong>${esc(o.party_name)}</strong><br>
+      ${esc(o.party_town||"")}${o.party_phone?" · "+esc(o.party_phone):""}
+      ${o.party_gstin?"<br>GSTIN: "+esc(o.party_gstin):""}
+    </div>
+    <table style="font-size:13px"><thead><tr>
+      <th>Product</th><th class="r">Ctns</th><th class="r">Doz</th>
+      <th class="r">List/Doz</th><th class="r">Disc.</th>
+      <th class="r">Net/Doz</th><th class="r">Amount</th>
+    </tr></thead><tbody>${rows}</tbody></table>
+    <div class="sum" style="margin-top:14px">
+      <div><span>Gross at list</span><span>${inr(o.gross_amount)}</span></div>
+      <div><span>Less discount</span><span>- ${inr(o.discount_amount)}</span></div>
+      <div><span>Taxable value</span><span>${inr(o.net_amount)}</span></div>
+      <div><span>GST</span><span>${inr(o.gst_amount)}</span></div>
+      <div class="big"><span>Order value</span><span>₹ ${inr(o.grand_total)}</span></div>
+    </div>
+    ${o.notes?`<p style="margin-top:14px"><strong>Remarks:</strong> ${esc(o.notes)}</p>`:""}
+    <p class="sub" style="margin-top:18px;font-size:11px">
+      This is an order acknowledgement, not a tax invoice. Subject to confirmation and stock.</p>`;
+
+  $("app").style.display="none"; $("ackWrap").style.display=""; window.scrollTo(0,0);
+}
+
+$("newBtn").onclick=()=>{
+  $("ackWrap").style.display="none"; $("app").style.display="";
+  ["party","town","phone","gstin","notes"].forEach(i=>$(i).value="");
+  $("rows").querySelectorAll("input.ctn").forEach(i=>i.value="");
+  say("appMsg",""); recalc(); window.scrollTo(0,0);
+};
+
+$("signout").onclick=e=>{ e.preventDefault(); sessionStorage.removeItem("ont_pin"); location.reload(); };
+
+(async function(){
+  const s=sessionStorage.getItem("ont_pin"); if(!s)return;
+  try{
+    const d=await api({action:"login",pin:s});
+    PIN=s; REP=d.rep; PRODUCTS=d.products||[]; PARTIES=d.parties||[];
+    render();
+  }catch(e){ sessionStorage.removeItem("ont_pin"); }
+})();
+</script>
+</body>
+</html>
