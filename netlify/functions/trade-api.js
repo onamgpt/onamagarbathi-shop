@@ -185,7 +185,8 @@ export default async (req) => {
       const assigned = (rep.channels && rep.channels.length) ? rep.channels : ["TRADE"];
       // A channel with no price list loaded is not offered — an empty
       // catalogue looks like a bug to whoever is standing in the shop.
-      const defined = await sb("GET", "/trade_channels?active=eq.true&select=code&order=sort_order.asc");
+      const defined = await sb("GET",
+        "/trade_channels?active=eq.true&entry_mode=eq.rep&select=code&order=sort_order.asc");
       const stocked = await sb("GET", "/trade_products?active=eq.true&select=channel");
       const hasItems = new Set((stocked || []).map(p => p.channel || "TRADE"));
       const order = (defined || []).map(c => c.code);
@@ -407,6 +408,64 @@ export default async (req) => {
       const agents   = await sb("GET", "/trade_agents?select=*&order=name.asc");
       const channels = await sb("GET", "/trade_channels?select=*&order=sort_order.asc");
       return J({ ok: true, reps, products, orders, agents, channels, today });
+    }
+
+    // Office-entered orders. CSD depots raise a supply order; nobody is
+    // standing in a shop booking it, so it is keyed here instead.
+    if (action === "adminPlaceOrder") {
+      if (!admin()) return J({ error: "Not authorised" }, 401);
+      const party = body.party || {};
+      if (!party.name) return J({ error: "Depot or party name is required" }, 400);
+      const channel = (body.channel || "CSD").toUpperCase();
+      const wanted = Array.isArray(body.lines) ? body.lines : [];
+      if (!wanted.length) return J({ error: "No items in the order" }, 400);
+
+      const catalog = await sb("GET",
+        "/trade_products?active=eq.true&channel=eq." + q(channel) + "&select=*");
+      const bySku = {}; catalog.forEach(p => { bySku[p.sku] = p; });
+
+      const lines = []; let cartons = 0, gross = 0, net = 0, gst = 0;
+      for (const w of wanted) {
+        const p = bySku[w.sku]; if (!p) continue;
+        const ctn = Math.max(0, parseInt(w.cartons, 10) || 0); if (!ctn) continue;
+        const pr = priceOf(p, today);
+        const doz = r2(Number(p.doz_per_ctn) * ctn);
+        const listAmt = r2(pr.list * doz), netAmt = r2(pr.net * doz);
+        const gstPct = Number(p.gst_pct || 5), gstAmt = r2(netAmt * gstPct / 100);
+        lines.push({ sku: p.sku, name: p.name, cartons: ctn,
+          doz_per_ctn: Number(p.doz_per_ctn), dozens: doz,
+          each: p.rate_per_each == null ? null : Number(p.rate_per_each),
+          units: p.units_per_case ? ctn * Number(p.units_per_case) : null,
+          list_rate: pr.list, trade_pct: pr.trade, scheme_pct: pr.scheme,
+          net_rate: pr.net, list_amount: listAmt, amount: netAmt,
+          gst_pct: gstPct, gst_amount: gstAmt, hsn: p.hsn });
+        cartons += ctn; gross = r2(gross + listAmt);
+        net = r2(net + netAmt); gst = r2(gst + gstAmt);
+      }
+      if (!lines.length) return J({ error: "No valid items" }, 400);
+
+      const repCode = (body.rep_code || "OFFICE").toUpperCase();
+      const existing = await sb("GET",
+        "/trade_orders?rep_code=eq." + q(repCode) + "&select=id&order=id.desc&limit=1");
+      const seq = (existing && existing.length ? existing[0].id : 0) + 1;
+      const orderNo = "ONT/" + repCode + "/" + fyLabel(new Date()) + "/" +
+                      String(seq).padStart(3, "0");
+
+      const inserted = await sb("POST", "/trade_orders", [{
+        order_no: orderNo, rep_code: repCode, channel,
+        party_name: String(party.name).trim().slice(0, 120),
+        party_town: (party.town || "").slice(0, 80),
+        party_phone: (party.phone || "").slice(0, 20),
+        party_gstin: (party.gstin || "").toUpperCase().slice(0, 15),
+        lines, total_cartons: cartons,
+        gross_amount: gross, discount_amount: r2(gross - net),
+        net_amount: net, gst_amount: gst, grand_total: r2(net + gst),
+        collection_status: "pending", notes: (body.notes || "").slice(0, 500)
+      }], "return=representation");
+
+      const order = inserted[0];
+      await mailOrder(order, { code: repCode, name: "Office", territory: channel });
+      return J({ ok: true, order });
     }
 
     if (action === "adminSaveRep") {
