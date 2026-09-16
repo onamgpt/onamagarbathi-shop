@@ -108,7 +108,7 @@
     <div class="card">
       <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
         <div style="flex:1;min-width:140px"><label>Channel</label>
-          <select id="selChan"><option value="TRADE">TRADE</option><option value="CPC">CPC</option></select></div>
+          <select id="selChan"></select></div>
         <button class="ghost sm" id="addRow">+ Add product</button>
       </div>
       <div id="catMsg" class="msg"></div>
@@ -192,7 +192,7 @@ async function api(p){
 async function load(){
   DATA=await api({action:"adminList"});
   PEND=await api({action:"adminPending"});
-  drawColl(); drawPending(); drawProducts(); drawReps(); drawAgents(); drawOrders();
+  drawChannels(); drawColl(); drawPending(); drawProducts(); drawReps(); drawAgents(); drawOrders();
 }
 
 $("go").onclick=async()=>{
@@ -294,6 +294,15 @@ function drawPending(){
      || '<tr><td colspan="4" class="sk">Nothing outstanding.</td></tr>';
 }
 
+/* ---------- channels ---------- */
+function drawChannels(){
+  const cur=$("selChan").value;
+  const list=(DATA.channels||[]).filter(c=>c.active!==false);
+  $("selChan").innerHTML=(list.length?list:[{code:"TRADE",name:"General Trade"}])
+    .map(c=>`<option value="${esc(c.code)}">${esc(c.code)} — ${esc(c.name)}</option>`).join("");
+  if(cur) $("selChan").value=cur;
+}
+
 /* ---------- rates & schemes ---------- */
 function prow(p){
   return `<tr data-id="${p.id||""}">
@@ -321,7 +330,8 @@ function drawProducts(){
 $("selChan").onchange=drawProducts;
 $("addRow").onclick=()=>{
   $("prows").insertAdjacentHTML("afterbegin",prow(
-    {name:"",sku:"",rate_per_doz:"",doz_per_ctn:12,trade_disc_pct:$("selChan").value==="CPC"?0:11,
+    {name:"",sku:"",rate_per_doz:"",doz_per_ctn:12,
+     trade_disc_pct:(((DATA.channels||[]).find(c=>c.code===$("selChan").value)||{}).default_disc_pct)||0,
      scheme_pct:0,scheme_approved:false}));
 };
 $("prows").addEventListener("click",async e=>{
