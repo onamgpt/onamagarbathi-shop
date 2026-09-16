@@ -3,6 +3,9 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+  # Applies any pending SQL in /migrations to Supabase before publishing, so
+  # schema changes ship with the code that needs them. No-ops without a token.
+  command = "node scripts/migrate.mjs"
   environment = { SECRETS_SCAN_OMIT_KEYS = "RAZORPAY_KEY_ID" }
 
 # Portal routes — must come BEFORE the SPA catch-all, or these paths would be
