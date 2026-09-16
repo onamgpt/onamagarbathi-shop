@@ -182,8 +182,12 @@ export default async (req) => {
       const rep = await repFromPin(body.pin);
       if (!rep) return J({ error: "Access code not recognised" }, 401);
 
+      const channels = (rep.channels && rep.channels.length) ? rep.channels : ["TRADE"];
+      const channel = channels.includes(body.channel) ? body.channel : channels[0];
+
       const raw = await sb("GET",
-        "/trade_products?active=eq.true&select=*&order=sort_order.asc");
+        "/trade_products?active=eq.true&channel=eq." + q(channel) +
+        "&select=*&order=sort_order.asc");
       const products = raw.map(p => {
         const pr = priceOf(p, today);
         return {
@@ -194,10 +198,15 @@ export default async (req) => {
           net_rate: pr.net,
           amount_per_ctn: r2(pr.net * Number(p.doz_per_ctn)),
           list_per_ctn:   r2(pr.list * Number(p.doz_per_ctn)),
+          rate_per_case: p.rate_per_case == null ? null : Number(p.rate_per_case),
           moq_cartons: p.moq_cartons || 1, gst_pct: Number(p.gst_pct || 5),
           image_url: p.image_url
         };
       });
+
+      // Commission is occasional, so agents are offered rather than assumed.
+      const agents = await sb("GET",
+        "/trade_agents?active=eq.true&select=name,default_pct&order=name.asc");
 
       // Parties this rep has booked before, so the next order autofills.
       const past = await sb("GET",
@@ -210,7 +219,7 @@ export default async (req) => {
         seen.add(k); parties.push(o);
       });
 
-      return J({ ok: true, products, parties,
+      return J({ ok: true, products, parties, agents, channel, channels,
         rep: { code: rep.code, name: rep.name, territory: rep.territory } });
     }
 
@@ -225,7 +234,10 @@ export default async (req) => {
       const wanted = Array.isArray(body.lines) ? body.lines : [];
       if (!wanted.length) return J({ error: "No items in the order" }, 400);
 
-      const catalog = await sb("GET", "/trade_products?active=eq.true&select=*");
+      const repChannels = (rep.channels && rep.channels.length) ? rep.channels : ["TRADE"];
+      const channel = repChannels.includes(body.channel) ? body.channel : repChannels[0];
+      const catalog = await sb("GET",
+        "/trade_products?active=eq.true&channel=eq." + q(channel) + "&select=*");
       const bySku = {};
       catalog.forEach(p => { bySku[p.sku] = p; });
 
@@ -264,8 +276,26 @@ export default async (req) => {
       const orderNo = "ONT/" + rep.code + "/" + fyLabel(new Date()) + "/" +
                       String(seq).padStart(3, "0");
 
+      // Commission: taken on the taxable value, before GST. The percentage is
+      // whatever was agreed on this order; the agent's standing rate is only a
+      // default, so an override is allowed but must be deliberate.
+      let agent = (body.agent || "").trim().slice(0, 80) || null;
+      let commPct = 0;
+      if (agent) {
+        const known = await sb("GET",
+          "/trade_agents?name=eq." + q(agent) + "&select=default_pct");
+        const fallback = known && known.length ? Number(known[0].default_pct || 0) : 0;
+        commPct = (body.commission_pct === undefined || body.commission_pct === "")
+                  ? fallback : Number(body.commission_pct);
+        if (!(commPct >= 0 && commPct <= 100)) commPct = fallback;
+      }
+      const commAmt = r2(net * commPct / 100);
+
       const row = {
-        order_no: orderNo, rep_code: rep.code,
+        order_no: orderNo, rep_code: rep.code, channel,
+        agent, commission_pct: commPct,
+        commission_amount: commAmt, commission_base: net,
+        collection_status: "pending", collected_amount: 0,
         party_name: String(party.name).trim().slice(0, 120),
         party_town: (party.town || "").slice(0, 80),
         party_phone: (party.phone || "").slice(0, 20),
@@ -289,7 +319,8 @@ export default async (req) => {
       const reps     = await sb("GET", "/trade_reps?select=*&order=code.asc");
       const products = await sb("GET", "/trade_products?select=*&order=sort_order.asc");
       const orders   = await sb("GET", "/trade_orders?select=*&order=id.desc&limit=100");
-      return J({ ok: true, reps, products, orders, today });
+      const agents   = await sb("GET", "/trade_agents?select=*&order=name.asc");
+      return J({ ok: true, reps, products, orders, agents, today });
     }
 
     if (action === "adminSaveRep") {
@@ -338,6 +369,25 @@ export default async (req) => {
       if (!body.id) return J({ error: "Missing id" }, 400);
       await sb("DELETE", "/trade_products?id=eq." + q(String(body.id)));
       return J({ ok: true });
+    }
+
+    if (action === "adminRecordCollection") {
+      if (!admin()) return J({ error: "Not authorised" }, 401);
+      if (!body.order_no) return J({ error: "Missing order_no" }, 400);
+      const rows = await sb("GET",
+        "/trade_orders?order_no=eq." + q(body.order_no) + "&select=grand_total,collected_amount");
+      if (!rows.length) return J({ error: "Order not found" }, 404);
+      const total = Number(rows[0].grand_total || 0);
+      const already = Number(rows[0].collected_amount || 0);
+      const add = Number(body.amount || 0);
+      if (!(add > 0)) return J({ error: "Enter an amount" }, 400);
+
+      const now = r2(already + add);
+      const status = now >= total - 0.5 ? "paid" : (now > 0 ? "part" : "pending");
+      const upd = await sb("PATCH", "/trade_orders?order_no=eq." + q(body.order_no),
+        { collected_amount: now, collection_status: status,
+          collected_at: new Date().toISOString() }, "return=representation");
+      return J({ ok: true, order: upd[0], outstanding: r2(total - now) });
     }
 
     if (action === "adminUpdateOrder") {
