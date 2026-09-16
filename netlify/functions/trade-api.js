@@ -182,7 +182,15 @@ export default async (req) => {
       const rep = await repFromPin(body.pin);
       if (!rep) return J({ error: "Access code not recognised" }, 401);
 
-      const channels = (rep.channels && rep.channels.length) ? rep.channels : ["TRADE"];
+      const assigned = (rep.channels && rep.channels.length) ? rep.channels : ["TRADE"];
+      // A channel with no price list loaded is not offered — an empty
+      // catalogue looks like a bug to whoever is standing in the shop.
+      const defined = await sb("GET", "/trade_channels?active=eq.true&select=code&order=sort_order.asc");
+      const stocked = await sb("GET", "/trade_products?active=eq.true&select=channel");
+      const hasItems = new Set((stocked || []).map(p => p.channel || "TRADE"));
+      const order = (defined || []).map(c => c.code);
+      const channels = order.filter(c => assigned.includes(c) && hasItems.has(c));
+      if (!channels.length) channels.push(assigned[0]);
       const channel = channels.includes(body.channel) ? body.channel : channels[0];
 
       const raw = await sb("GET",
@@ -397,7 +405,8 @@ export default async (req) => {
       const products = await sb("GET", "/trade_products?select=*&order=sort_order.asc");
       const orders   = await sb("GET", "/trade_orders?select=*&order=id.desc&limit=100");
       const agents   = await sb("GET", "/trade_agents?select=*&order=name.asc");
-      return J({ ok: true, reps, products, orders, agents, today });
+      const channels = await sb("GET", "/trade_channels?select=*&order=sort_order.asc");
+      return J({ ok: true, reps, products, orders, agents, channels, today });
     }
 
     if (action === "adminSaveRep") {
