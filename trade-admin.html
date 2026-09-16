@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Trade Admin — Onam Agarbathi</title>
+<style>
+  :root{--ink:#1c1917;--muted:#78716c;--line:#e7e5e4;--bg:#faf9f7;
+        --gold:#9a6b2f;--gold-soft:#f5efe4;--ok:#166534;--err:#9f1239}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1120px;margin:0 auto;padding:18px 14px 70px}
+  h1{font-size:19px;margin:0 0 2px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0 0 12px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:14px}
+  label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.07em;
+        color:var(--muted);margin-bottom:5px}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:6px;
+        font-size:16px;font-family:inherit;background:#fff;color:var(--ink)}
+  button{background:var(--ink);color:#fff;border:0;border-radius:6px;padding:10px 16px;
+         font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+  button.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+  button.danger{background:#fff;color:var(--err);border:1px solid #fecdd3}
+  button.sm{padding:7px 12px;font-size:13px}
+  .grid{display:grid;gap:11px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .msg{padding:10px 13px;border-radius:6px;font-size:14px;margin-top:11px;display:none}
+  .msg.err{background:#fff1f2;color:var(--err);display:block}
+  .msg.ok{background:#f0fdf4;color:var(--ok);display:block}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.06em;
+     color:var(--muted);padding:8px 6px;border-bottom:1px solid var(--line)}
+  td{padding:7px 6px;border-bottom:1px solid #f5f5f4;vertical-align:middle}
+  th.r,td.r{text-align:right}
+  td input,td select{padding:7px;font-size:14px}
+  td input.n{text-align:right}
+  .tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+  .tab{padding:8px 15px;border-radius:999px;border:1px solid var(--line);background:#fff;
+       font-size:14px;cursor:pointer;font-weight:600}
+  .tab.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:10px;
+        font-weight:700;letter-spacing:.05em;background:#f5f5f4;color:var(--muted)}
+  .pill.wait{background:var(--gold-soft);color:#6b4a1e}
+  .pill.bad{background:#fff1f2;color:var(--err)}
+  .pill.good{background:#f0fdf4;color:var(--ok)}
+  .amt{font-variant-numeric:tabular-nums;white-space:nowrap}
+  .nm{font-weight:600}
+  .sk{font-size:11px;color:var(--muted)}
+  #gate{max-width:340px;margin:14vh auto 0}
+  @media(max-width:700px){ .hide{display:none} }
+</style>
+</head>
+<body>
+
+<div id="gate" class="wrap">
+  <div class="card">
+    <h1 style="text-align:center;margin-bottom:14px">Trade Admin</h1>
+    <label for="apin">Admin PIN</label>
+    <input id="apin" type="password" inputmode="numeric" autocomplete="off">
+    <div style="height:12px"></div>
+    <button id="go" style="width:100%">Open</button>
+    <div id="gm" class="msg"></div>
+  </div>
+</div>
+
+<div id="app" class="wrap" style="display:none">
+  <h1>Trade Admin</h1>
+  <p class="sk" style="margin:0 0 16px">Collections, schemes, rates, reps and agents.</p>
+
+  <div class="tabs">
+    <div class="tab on" data-t="coll">Collections <span id="cCount" class="pill"></span></div>
+    <div class="tab" data-t="pend">Pending</div>
+    <div class="tab" data-t="cat">Rates &amp; schemes</div>
+    <div class="tab" data-t="reps">Reps &amp; agents</div>
+    <div class="tab" data-t="ord">Orders</div>
+  </div>
+
+  <!-- COLLECTIONS -->
+  <div id="tab-coll">
+    <div class="card">
+      <h2>Awaiting your confirmation</h2>
+      <p class="sk" style="margin:-6px 0 14px">
+        A rep has said money came in. Confirm it, or send it back asking for proof.
+      </p>
+      <div id="collList"></div>
+      <div id="collMsg" class="msg"></div>
+    </div>
+  </div>
+
+  <!-- PENDING -->
+  <div id="tab-pend" style="display:none">
+    <div class="card">
+      <h2>Outstanding by party</h2>
+      <table><thead><tr><th>Party</th><th class="r">Orders</th><th class="r">Due</th></tr></thead>
+        <tbody id="pParty"></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Outstanding by rep</h2>
+      <table><thead><tr><th>Rep</th><th class="r">Orders</th>
+        <th class="r hide">Unconfirmed</th><th class="r">Due</th></tr></thead>
+        <tbody id="pRep"></tbody></table>
+    </div>
+  </div>
+
+  <!-- RATES & SCHEMES -->
+  <div id="tab-cat" style="display:none">
+    <div class="card">
+      <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px"><label>Channel</label>
+          <select id="selChan"><option value="TRADE">TRADE</option><option value="CPC">CPC</option></select></div>
+        <button class="ghost sm" id="addRow">+ Add product</button>
+      </div>
+      <div id="catMsg" class="msg"></div>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th>Product</th><th class="r">Rate/Doz</th><th class="r hide">Doz/Ctn</th>
+          <th class="r hide">Trade %</th><th class="r">Scheme %</th>
+          <th class="hide">From</th><th class="hide">To</th>
+          <th class="r">Live</th><th></th>
+        </tr></thead>
+        <tbody id="prows"></tbody>
+      </table>
+      <p class="sk" style="margin:12px 0 0">
+        A scheme applies only when Live is ticked and today falls inside its dates.
+        It compounds on the post-trade-discount rate.
+      </p>
+    </div>
+  </div>
+
+  <!-- REPS & AGENTS -->
+  <div id="tab-reps" style="display:none">
+    <div class="card">
+      <h2>Add or update a rep</h2>
+      <div class="grid">
+        <div><label>Code</label><input id="r_code" placeholder="SOORAJ"></div>
+        <div><label>Name</label><input id="r_name"></div>
+        <div><label>Territory</label><input id="r_terr"></div>
+        <div><label>PIN</label><input id="r_pin" inputmode="numeric"></div>
+      </div>
+      <div style="height:12px"></div>
+      <button id="saveRep">Save rep</button>
+      <div id="repMsg" class="msg"></div>
+    </div>
+    <div class="card">
+      <h2>Reps</h2>
+      <table><thead><tr><th>Code</th><th>Name</th><th class="hide">Territory</th>
+        <th class="hide">Channels</th><th class="r">PIN</th></tr></thead>
+        <tbody id="rrows"></tbody></table>
+    </div>
+    <div class="card">
+      <h2>Agents</h2>
+      <table><thead><tr><th>Agent</th><th class="r">Default %</th><th class="hide">Note</th></tr></thead>
+        <tbody id="arows"></tbody></table>
+      <p class="sk" style="margin:12px 0 0">
+        Commission is occasional, so the rep picks an agent per order and can
+        override the percentage. It is taken on the pre-GST value.
+      </p>
+    </div>
+  </div>
+
+  <!-- ORDERS -->
+  <div id="tab-ord" style="display:none">
+    <div class="card">
+      <h2>Recent orders</h2>
+      <table><thead><tr><th>Order</th><th class="hide">Party</th><th class="r">Value</th>
+        <th class="r hide">Commission</th><th>Status</th></tr></thead>
+        <tbody id="orows"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+const API="/.netlify/functions/trade-api";
+let PIN="", DATA={reps:[],products:[],orders:[],agents:[]}, PEND={open:[],byParty:[],byRep:[]};
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const inr=n=>Number(n||0).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
+const r2=n=>Math.round(Number(n||0)*100)/100;
+function say(el,t,k){const m=$(el);m.textContent=t;m.className="msg "+(k||"");if(!t)m.className="msg";}
+
+async function api(p){
+  const r=await fetch(API,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(Object.assign({adminPin:PIN},p))});
+  const d=await r.json().catch(()=>({error:"No response"}));
+  if(!r.ok) throw new Error(d.error||"Failed");
+  return d;
+}
+
+async function load(){
+  DATA=await api({action:"adminList"});
+  PEND=await api({action:"adminPending"});
+  drawColl(); drawPending(); drawProducts(); drawReps(); drawAgents(); drawOrders();
+}
+
+$("go").onclick=async()=>{
+  PIN=$("apin").value.trim(); if(!PIN)return;
+  $("go").disabled=true; say("gm","");
+  try{ await load(); sessionStorage.setItem("ont_admin",PIN);
+       $("gate").style.display="none"; $("app").style.display=""; }
+  catch(e){ say("gm",e.message,"err"); PIN=""; }
+  finally{ $("go").disabled=false; }
+};
+$("apin").addEventListener("keydown",e=>{if(e.key==="Enter")$("go").click();});
+
+document.querySelectorAll(".tab").forEach(t=>t.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+  t.classList.add("on");
+  ["coll","pend","cat","reps","ord"].forEach(k=>$("tab-"+k).style.display=k===t.dataset.t?"":"none");
+});
+
+/* ---------- collections ---------- */
+function drawColl(){
+  const rows=(DATA.orders||[]).filter(o=>{
+    const cl=Number(o.claimed_amount||0), cf=Number(o.confirmed_amount||0);
+    return o.disputed || cl>cf+0.5;
+  });
+  $("cCount").textContent=rows.length||"";
+  if(!rows.length){ $("collList").innerHTML='<p class="sk">Nothing waiting.</p>'; return; }
+
+  $("collList").innerHTML=rows.map(o=>{
+    const total=Number(o.grand_total||0), cf=Number(o.confirmed_amount||0);
+    const waiting=r2(Number(o.claimed_amount||0)-cf);
+    const pill=o.disputed?'<span class="pill bad">DISPUTED</span>'
+                         :'<span class="pill wait">CLAIMED</span>';
+    return `<div style="border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:11px"
+                 data-no="${esc(o.order_no)}">
+      <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div><div class="nm">${esc(o.party_name)}</div>
+          <div class="sk">${esc(o.order_no)} · ${esc(o.rep_code)} · ${esc(o.channel||"TRADE")}</div></div>
+        <div style="text-align:right">${pill}
+          <div class="amt" style="font-weight:700;margin-top:4px">₹ ${inr(total)}</div></div>
+      </div>
+      <div class="sk" style="margin-top:7px">
+        Rep claims ₹${inr(waiting)} not yet confirmed · already confirmed ₹${inr(cf)}
+      </div>
+      <div class="proof sk" style="margin-top:7px"></div>
+      <div style="display:flex;gap:8px;margin-top:11px;flex-wrap:wrap;align-items:flex-end">
+        <div style="flex:1;min-width:110px"><label>Confirm ₹</label>
+          <input class="aAmt n" type="number" step="0.01" value="${waiting>0?waiting:""}"></div>
+        <button class="sm aOk">Confirm</button>
+        <button class="sm danger aNo">Not received</button>
+        <button class="sm ghost aHist">History</button>
+      </div>
+    </div>`;}).join("");
+}
+
+$("collList").addEventListener("click",async e=>{
+  const card=e.target.closest("[data-no]"); if(!card)return;
+  const no=card.dataset.no;
+
+  if(e.target.classList.contains("aHist")){
+    try{
+      const d=await api({action:"adminCollectionHistory",order_no:no});
+      card.querySelector(".proof").innerHTML=(d.claims||[]).map(c=>
+        `${c.side==="rep"?"Rep":"Office"} · ₹${inr(c.amount)}${c.mode?" · "+esc(c.mode):""}${
+          c.reference?" · "+esc(c.reference):""}${
+          c.proof_url?` · <a href="${esc(c.proof_url)}" target="_blank">photo</a>`:""}`
+      ).join("<br>")||"No entries.";
+    }catch(err){ say("collMsg",err.message,"err"); }
+    return;
+  }
+
+  if(e.target.classList.contains("aOk")){
+    const amt=card.querySelector(".aAmt").value;
+    if(!(Number(amt)>0)){ say("collMsg","Enter the amount you are confirming","err"); return; }
+    e.target.disabled=true;
+    try{ await api({action:"adminConfirmCollection",order_no:no,decision:"confirm",amount:amt});
+         await load(); say("collMsg","Confirmed.","ok"); }
+    catch(err){ say("collMsg",err.message,"err"); e.target.disabled=false; }
+  }
+
+  if(e.target.classList.contains("aNo")){
+    const note=prompt("What should the rep be told?","Not received — please send proof");
+    if(note===null)return;
+    try{ await api({action:"adminConfirmCollection",order_no:no,decision:"dispute",note});
+         await load(); say("collMsg","Sent back to the rep.","ok"); }
+    catch(err){ say("collMsg",err.message,"err"); }
+  }
+});
+
+/* ---------- pending ---------- */
+function drawPending(){
+  $("pParty").innerHTML=(PEND.byParty||[]).map(p=>
+    `<tr><td>${esc(p.party)}</td><td class="r">${p.orders}</td>
+     <td class="r amt">₹ ${inr(p.due)}</td></tr>`).join("")
+     || '<tr><td colspan="3" class="sk">Nothing outstanding.</td></tr>';
+  $("pRep").innerHTML=(PEND.byRep||[]).map(p=>
+    `<tr><td>${esc(p.rep)}</td><td class="r">${p.orders}</td>
+     <td class="r amt hide">₹ ${inr(p.unconfirmed)}</td>
+     <td class="r amt">₹ ${inr(p.due)}</td></tr>`).join("")
+     || '<tr><td colspan="4" class="sk">Nothing outstanding.</td></tr>';
+}
+
+/* ---------- rates & schemes ---------- */
+function prow(p){
+  return `<tr data-id="${p.id||""}">
+    <td><input data-f="name" value="${esc(p.name)}">
+        <div class="sk">${esc(p.sku)}</div>
+        <input data-f="sku" value="${esc(p.sku)}" style="display:none"></td>
+    <td class="r"><input class="n" data-f="rate_per_doz" type="number" step="0.01" value="${p.rate_per_doz}"></td>
+    <td class="r hide"><input class="n" data-f="doz_per_ctn" type="number" step="0.01" value="${p.doz_per_ctn}"></td>
+    <td class="r hide"><input class="n" data-f="trade_disc_pct" type="number" step="0.01" value="${p.trade_disc_pct}"></td>
+    <td class="r"><input class="n" data-f="scheme_pct" type="number" step="0.01" value="${p.scheme_pct||0}"></td>
+    <td class="hide"><input data-f="scheme_from" type="date" value="${p.scheme_from||""}"></td>
+    <td class="hide"><input data-f="scheme_to" type="date" value="${p.scheme_to||""}"></td>
+    <td class="r"><input data-f="scheme_approved" type="checkbox" ${p.scheme_approved?"checked":""}
+        style="width:20px;height:20px"></td>
+    <td class="r" style="white-space:nowrap">
+      <button class="sm save">Save</button>${p.id?'<button class="danger sm del">×</button>':''}</td>
+  </tr>`;
+}
+function drawProducts(){
+  const ch=$("selChan").value;
+  const list=(DATA.products||[]).filter(p=>(p.channel||"TRADE")===ch);
+  $("prows").innerHTML=list.map(prow).join("")
+    || '<tr><td colspan="9" class="sk">No products in this channel.</td></tr>';
+}
+$("selChan").onchange=drawProducts;
+$("addRow").onclick=()=>{
+  $("prows").insertAdjacentHTML("afterbegin",prow(
+    {name:"",sku:"",rate_per_doz:"",doz_per_ctn:12,trade_disc_pct:$("selChan").value==="CPC"?0:11,
+     scheme_pct:0,scheme_approved:false}));
+};
+$("prows").addEventListener("click",async e=>{
+  const tr=e.target.closest("tr"); if(!tr)return;
+  const g=f=>{const el=tr.querySelector('[data-f="'+f+'"]');
+              return el?(el.type==="checkbox"?el.checked:el.value):undefined;};
+  if(e.target.classList.contains("save")){
+    const product={id:tr.dataset.id||undefined,channel:$("selChan").value,
+      name:g("name"),sku:g("sku")||g("name").toUpperCase().replace(/[^A-Z0-9]+/g,"-").slice(0,40),
+      rate_per_doz:g("rate_per_doz"),doz_per_ctn:g("doz_per_ctn"),
+      trade_disc_pct:g("trade_disc_pct"),scheme_pct:g("scheme_pct"),
+      scheme_from:g("scheme_from")||null,scheme_to:g("scheme_to")||null,
+      scheme_approved:g("scheme_approved")};
+    if(!product.name||product.rate_per_doz===""){say("catMsg","Name and rate are required","err");return;}
+    e.target.disabled=true;
+    try{ await api({action:"adminSaveProduct",product}); await load();
+         say("catMsg","Saved "+product.name,"ok"); }
+    catch(err){ say("catMsg",err.message,"err"); e.target.disabled=false; }
+  }
+  if(e.target.classList.contains("del")){
+    if(!confirm("Remove this product?"))return;
+    try{ await api({action:"adminDeleteProduct",id:tr.dataset.id}); await load();
+         say("catMsg","Removed","ok"); }
+    catch(err){ say("catMsg",err.message,"err"); }
+  }
+});
+
+/* ---------- reps & agents ---------- */
+function drawReps(){
+  $("rrows").innerHTML=(DATA.reps||[]).map(r=>
+    `<tr><td><strong>${esc(r.code)}</strong></td><td>${esc(r.name)}</td>
+     <td class="hide">${esc(r.territory)}</td>
+     <td class="hide">${esc((r.channels||[]).join(", "))}</td>
+     <td class="r">${esc(r.pin)}</td></tr>`).join("")
+     || '<tr><td colspan="5" class="sk">No reps yet.</td></tr>';
+}
+function drawAgents(){
+  $("arows").innerHTML=(DATA.agents||[]).map(a=>
+    `<tr><td>${esc(a.name)}</td><td class="r">${a.default_pct}%</td>
+     <td class="hide sk">${esc(a.note)}</td></tr>`).join("")
+     || '<tr><td colspan="3" class="sk">No agents.</td></tr>';
+}
+$("saveRep").onclick=async()=>{
+  const rep={code:$("r_code").value,name:$("r_name").value,
+             territory:$("r_terr").value,pin:$("r_pin").value};
+  if(!rep.code||!rep.name||!rep.pin){say("repMsg","Code, name and PIN are required","err");return;}
+  try{ await api({action:"adminSaveRep",rep}); await load();
+       say("repMsg","Saved "+rep.code.toUpperCase(),"ok");
+       ["r_code","r_name","r_terr","r_pin"].forEach(i=>$(i).value=""); }
+  catch(e){ say("repMsg",e.message,"err"); }
+};
+
+/* ---------- orders ---------- */
+function drawOrders(){
+  $("orows").innerHTML=(DATA.orders||[]).map(o=>{
+    const cf=Number(o.confirmed_amount||0), tot=Number(o.grand_total||0);
+    let pill='<span class="pill">PENDING</span>';
+    if(o.disputed) pill='<span class="pill bad">DISPUTED</span>';
+    else if(cf>=tot-0.5) pill='<span class="pill good">PAID</span>';
+    else if(Number(o.claimed_amount||0)>cf+0.5) pill='<span class="pill wait">CLAIMED</span>';
+    else if(cf>0) pill='<span class="pill">PART</span>';
+    return `<tr><td><strong>${esc(o.order_no)}</strong>
+        <div class="sk">${esc(o.rep_code)} · ${esc(o.channel||"TRADE")}</div></td>
+      <td class="hide">${esc(o.party_name)}</td>
+      <td class="r amt">₹ ${inr(tot)}</td>
+      <td class="r amt hide">${o.agent?("₹ "+inr(o.commission_amount)+" ("+o.commission_pct+"%)"):"—"}</td>
+      <td>${pill}</td></tr>`;}).join("")
+      || '<tr><td colspan="5" class="sk">No orders yet.</td></tr>';
+}
+
+(async function(){
+  const s=sessionStorage.getItem("ont_admin"); if(!s)return;
+  PIN=s;
+  try{ await load(); $("gate").style.display="none"; $("app").style.display=""; }
+  catch(e){ sessionStorage.removeItem("ont_admin"); PIN=""; }
+})();
+</script>
+</body>
+</html>
