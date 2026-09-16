@@ -81,6 +81,11 @@
     <a href="#" id="signout" class="sub noprint">Sign out</a>
   </div>
 
+  <div class="card noprint" id="chanCard" style="display:none">
+    <label>Channel</label>
+    <div id="chanBtns" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+  </div>
+
   <div class="card noprint">
     <label for="party">Party / shop name</label>
     <input id="party" list="parties" autocomplete="off" placeholder="Shop name">
@@ -91,6 +96,13 @@
       <div><label>Phone</label><input id="phone" inputmode="tel"></div>
       <div><label>GSTIN (optional)</label><input id="gstin" maxlength="15"
              style="text-transform:uppercase"></div>
+    </div>
+    <div style="height:11px"></div>
+    <div class="grid">
+      <div><label>Agent (only if commission is due)</label>
+        <select id="agent"><option value="">No agent</option></select></div>
+      <div><label>Commission %</label>
+        <input id="commPct" type="number" step="0.01" placeholder="0" disabled></div>
     </div>
   </div>
 
@@ -121,6 +133,9 @@
       <div><span>Less discount</span><span id="sDisc">0.00</span></div>
       <div><span>Taxable value</span><span id="sNet">0.00</span></div>
       <div><span>GST 5%</span><span id="sGst">0.00</span></div>
+      <div id="sCommRow" style="display:none;color:var(--gold)">
+        <span>Commission <span id="sCommPct"></span> on taxable</span>
+        <span id="sComm">0.00</span></div>
       <div class="big"><span>Order value</span><span id="sTotal">0.00</span></div>
     </div>
   </div>
@@ -142,7 +157,7 @@
 
 <script>
 const API="/.netlify/functions/trade-api";
-let PIN="", REP=null, PRODUCTS=[], PARTIES=[];
+let PIN="", REP=null, PRODUCTS=[], PARTIES=[], AGENTS=[], CHANNEL="TRADE", CHANNELS=["TRADE"];
 const $=id=>document.getElementById(id);
 const inr=n=>Number(n||0).toLocaleString("en-IN",{minimumFractionDigits:2,maximumFractionDigits:2});
 const esc=s=>String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -162,6 +177,7 @@ async function enter(){
   try{
     const d=await api({action:"login",pin});
     PIN=pin; REP=d.rep; PRODUCTS=d.products||[]; PARTIES=d.parties||[];
+    AGENTS=d.agents||[]; CHANNEL=d.channel||"TRADE"; CHANNELS=d.channels||["TRADE"];
     sessionStorage.setItem("ont_pin",pin);
     render();
   }catch(e){ say("gateMsg",e.message,"err"); }
@@ -176,6 +192,17 @@ function render(){
   $("repMeta").textContent=[REP.code,REP.territory].filter(Boolean).join("  ·  ");
 
   $("parties").innerHTML=PARTIES.map(p=>`<option value="${esc(p.party_name)}">`).join("");
+
+  // Channel switch, only when the rep actually carries more than one.
+  if(CHANNELS.length>1){
+    $("chanCard").style.display="";
+    $("chanBtns").innerHTML=CHANNELS.map(c=>
+      `<button class="${c===CHANNEL?"":"ghost"}" data-chan="${c}">${c}</button>`).join("");
+    $("chanBtns").querySelectorAll("button").forEach(b=>b.onclick=()=>switchChannel(b.dataset.chan));
+  } else { $("chanCard").style.display="none"; }
+
+  $("agent").innerHTML='<option value="">No agent</option>'+
+    AGENTS.map(a=>`<option value="${esc(a.name)}" data-pct="${a.default_pct}">${esc(a.name)}</option>`).join("");
 
   $("rows").innerHTML=PRODUCTS.map(p=>{
     const disc = p.trade_disc_pct + (p.scheme_pct?p.scheme_pct:0);
@@ -201,6 +228,26 @@ function render(){
   $("rows").addEventListener("input",recalc);
   recalc();
 }
+
+async function switchChannel(c){
+  if(c===CHANNEL) return;
+  try{
+    const d=await api({action:"login",pin:PIN,channel:c});
+    CHANNEL=d.channel; PRODUCTS=d.products||[]; PARTIES=d.parties||[];
+    render();
+  }catch(e){ say("appMsg",e.message,"err"); }
+}
+
+// Agent drives the commission rate, but the rate stays editable per order
+// because commission here is occasional and negotiated, not standing.
+$("agent").addEventListener("change",()=>{
+  const opt=$("agent").selectedOptions[0];
+  const pct=opt?Number(opt.dataset.pct||0):0;
+  $("commPct").disabled=!$("agent").value;
+  $("commPct").value=$("agent").value?(pct||""):"";
+  recalc();
+});
+$("commPct").addEventListener("input",recalc);
 
 // Autofill the rest of the party details once the name matches a past order.
 $("party").addEventListener("input",()=>{
@@ -237,6 +284,14 @@ function recalc(){
   $("sNet").textContent=inr(net);
   $("sGst").textContent=inr(gst);
   $("sTotal").textContent="₹ "+inr(Math.round((net+gst)*100)/100);
+
+  const cp=Number($("commPct").value||0);
+  if($("agent").value && cp>0){
+    $("sCommRow").style.display="flex";
+    $("sCommPct").textContent="("+cp+"%)";
+    $("sComm").textContent=inr(Math.round(net*cp/100*100)/100);
+  } else { $("sCommRow").style.display="none"; }
+
   $("place").disabled=!any;
 }
 
@@ -250,7 +305,8 @@ $("place").onclick=async()=>{
   if(!lines.length)return;
   $("place").disabled=true; say("appMsg","Placing the order…","ok");
   try{
-    const d=await api({action:"placeOrder",pin:PIN,lines,
+    const d=await api({action:"placeOrder",pin:PIN,lines,channel:CHANNEL,
+      agent:$("agent").value,commission_pct:$("commPct").value,
       party:{name:$("party").value,town:$("town").value,
              phone:$("phone").value,gstin:$("gstin").value},
       notes:$("notes").value});
@@ -297,6 +353,9 @@ function showAck(o,rep){
       <div><span>Taxable value</span><span>${inr(o.net_amount)}</span></div>
       <div><span>GST</span><span>${inr(o.gst_amount)}</span></div>
       <div class="big"><span>Order value</span><span>₹ ${inr(o.grand_total)}</span></div>
+      ${o.agent?`<div style="color:var(--muted);margin-top:8px"><span>Agent ${esc(o.agent)}
+        — commission ${o.commission_pct}% on taxable</span>
+        <span>${inr(o.commission_amount)}</span></div>`:""}
     </div>
     ${o.notes?`<p style="margin-top:14px"><strong>Remarks:</strong> ${esc(o.notes)}</p>`:""}
     <p class="sub" style="margin-top:18px;font-size:11px">
@@ -307,7 +366,8 @@ function showAck(o,rep){
 
 $("newBtn").onclick=()=>{
   $("ackWrap").style.display="none"; $("app").style.display="";
-  ["party","town","phone","gstin","notes"].forEach(i=>$(i).value="");
+  ["party","town","phone","gstin","notes","commPct"].forEach(i=>$(i).value="");
+  $("agent").value=""; $("commPct").disabled=true;
   $("rows").querySelectorAll("input.ctn").forEach(i=>i.value="");
   say("appMsg",""); recalc(); window.scrollTo(0,0);
 };
@@ -319,6 +379,7 @@ $("signout").onclick=e=>{ e.preventDefault(); sessionStorage.removeItem("ont_pin
   try{
     const d=await api({action:"login",pin:s});
     PIN=s; REP=d.rep; PRODUCTS=d.products||[]; PARTIES=d.parties||[];
+    AGENTS=d.agents||[]; CHANNEL=d.channel||"TRADE"; CHANNELS=d.channels||["TRADE"];
     render();
   }catch(e){ sessionStorage.removeItem("ont_pin"); }
 })();
