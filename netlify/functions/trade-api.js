@@ -311,6 +311,39 @@ export default async (req) => {
       return J({ ok: true, order, rep, mail });
     }
 
+    // Upload a proof photo. Kept server-side so the storage key never reaches
+    // the browser. Returns a plain URL that goes onto the claim.
+    if (action === "uploadProof") {
+      const rep = await repFromPin(body.pin);
+      const isAdmin = ADMIN_PIN() && body.adminPin && String(body.adminPin) === ADMIN_PIN();
+      if (!rep && !isAdmin) return J({ error: "Access code not recognised" }, 401);
+
+      const data = String(body.data || "");
+      const m = data.match(/^data:(image\/[a-zA-Z+]+);base64,(.+)$/);
+      if (!m) return J({ error: "Send a JPEG or PNG image" }, 400);
+      const mime = m[1];
+      const bytes = Buffer.from(m[2], "base64");
+      if (bytes.length > 4 * 1024 * 1024)
+        return J({ error: "Image is too large — take it again at a smaller size" }, 400);
+
+      const ext = mime.includes("png") ? "png" : "jpg";
+      const safe = String(body.order_no || "misc").replace(/[^A-Za-z0-9]+/g, "-");
+      const path = `${safe}/${Date.now()}.${ext}`;
+
+      const up = await fetch(SB_URL() + "/storage/v1/object/collection-proofs/" + path, {
+        method: "POST",
+        headers: { apikey: SB_KEY(), Authorization: "Bearer " + SB_KEY(),
+                   "Content-Type": mime, "x-upsert": "true" },
+        body: bytes
+      });
+      if (!up.ok) {
+        const t = await up.text();
+        return J({ error: "Upload failed: " + t.slice(0, 200) }, 500);
+      }
+      return J({ ok: true,
+        url: SB_URL() + "/storage/v1/object/public/collection-proofs/" + path });
+    }
+
     // ---- collections: the rep's side --------------------------------------
     // A rep records what he collected. It is a claim, not a fact: it does not
     // settle the order until the office confirms it.
@@ -328,7 +361,8 @@ export default async (req) => {
       await sb("POST", "/collection_claims", [{
         order_no: o.order_no, side: "rep", actor: rep.code, amount,
         mode: (body.mode || "").slice(0, 20), reference: (body.reference || "").slice(0, 60),
-        note: (body.note || "").slice(0, 300)
+        note: (body.note || "").slice(0, 300),
+        proof_url: body.proof_url || null
       }]);
 
       const claimed = r2(Number(o.claimed_amount || 0) + amount);
@@ -453,6 +487,30 @@ export default async (req) => {
       }, "return=representation");
       return J({ ok: true, order: upd[0], outstanding: r2(total - confirmed),
                  unconfirmed: r2(Math.max(0, claimed - confirmed)) });
+    }
+
+    if (action === "adminPending") {
+      if (!admin()) return J({ error: "Not authorised" }, 401);
+      const orders = await sb("GET",
+        "/trade_orders?select=*&order=id.desc&limit=300");
+      const open = (orders || []).filter(o =>
+        Number(o.confirmed_amount || 0) < Number(o.grand_total || 0) - 0.5);
+
+      const byParty = {}, byRep = {};
+      open.forEach(o => {
+        const due = r2(Number(o.grand_total || 0) - Number(o.confirmed_amount || 0));
+        const unconf = r2(Math.max(0, Number(o.claimed_amount || 0) - Number(o.confirmed_amount || 0)));
+        (byParty[o.party_name] = byParty[o.party_name] || { party: o.party_name, due: 0, orders: 0 });
+        byParty[o.party_name].due = r2(byParty[o.party_name].due + due);
+        byParty[o.party_name].orders++;
+        (byRep[o.rep_code] = byRep[o.rep_code] || { rep: o.rep_code, due: 0, unconfirmed: 0, orders: 0 });
+        byRep[o.rep_code].due = r2(byRep[o.rep_code].due + due);
+        byRep[o.rep_code].unconfirmed = r2(byRep[o.rep_code].unconfirmed + unconf);
+        byRep[o.rep_code].orders++;
+      });
+      return J({ ok: true, open,
+        byParty: Object.values(byParty).sort((a, b) => b.due - a.due),
+        byRep: Object.values(byRep).sort((a, b) => b.due - a.due) });
     }
 
     if (action === "adminCollectionHistory") {
