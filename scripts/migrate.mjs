@@ -97,3 +97,4 @@ try {
   await writeStatus();
   process.exit(1);
 }
+// retry: env vars now stored at context=all
