@@ -24,6 +24,9 @@ const MAIL_FROM=() => Netlify.env.get("MAIL_FROM") || "orders@onamagarbathi.com"
 const MAIL_TO = () => (Netlify.env.get("CSD_REPORT_TO") || "onamagarbathi@gmail.com")
                       .split(",").map(s => s.trim()).filter(Boolean);
 const ADMIN_PIN = () => Netlify.env.get("EXPORT_ADMIN_PIN") || "";
+const TG_TOKEN = () => Netlify.env.get("TELEGRAM_BOT_TOKEN") || "";
+// The owner's own chat, not the website-orders group.
+const TG_CHAT  = () => Netlify.env.get("TELEGRAM_CHAT_ID") || "";
 
 const MON = { JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12 };
 const MONTH_NAME = ["","Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -213,6 +216,29 @@ function html(r, now) {
   </div>`;
 }
 
+// Short nudge on Telegram. The email carries the detail; this is just enough
+// to know whether opening it is worth doing now.
+async function telegram(r) {
+  if (!TG_TOKEN() || !TG_CHAT()) return { sent: false, reason: "not configured" };
+  const top = r.overdue.slice(0, 3)
+    .map(x => `• ${x.billNo} ${x.depot} — ₹${inr(x.amount)} (${x.age}d)`).join("\n");
+  const text =
+    `*CSD receivables*\n` +
+    `₹${inr(r.overdueValue)} overdue across ${r.overdue.length} bills\n` +
+    (top ? `\n${top}\n` : "\nNothing confidently overdue.\n") +
+    (r.live.length ? `\n⚠️ ${r.live.length} debit note(s) inside the 15-day dispute window\n` : "") +
+    `\nCSD pays in ${r.median}d median, ${r.p90}d at the 90th percentile.` +
+    (r.gaps.length ? `\n${r.unconfirmed.length} more bills unverifiable — ${r.gaps.length} statement(s) missing.` : "") +
+    `\n\nFull detail emailed.`;
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${TG_TOKEN()}/sendMessage`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: TG_CHAT(), text, parse_mode: "Markdown" })
+    });
+    return { sent: res.ok };
+  } catch (e) { return { sent: false, reason: String(e.message || e) }; }
+}
+
 async function run() {
   if (!SB_URL() || !SB_KEY()) throw new Error("Supabase not configured");
   const pay = await kv("pf_csd_payments");
@@ -224,8 +250,10 @@ async function run() {
   const now = new Date();
   const r = build(statements, invoices, now);
 
-  if (!MAIL_KEY()) return { ok: false, reason: "no mail key", summary: {
-    overdue: r.overdue.length, overdueValue: r.overdueValue } };
+  const tg = await telegram(r);
+
+  if (!MAIL_KEY()) return { ok: false, reason: "no mail key", telegram: tg,
+    summary: { overdue: r.overdue.length, overdueValue: r.overdueValue } };
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -238,7 +266,7 @@ async function run() {
       html: html(r, now)
     })
   });
-  return { ok: res.ok, sent_to: MAIL_TO(),
+  return { ok: res.ok, sent_to: MAIL_TO(), telegram: tg,
            overdue: r.overdue.length, overdueValue: r.overdueValue,
            unconfirmed: r.unconfirmed.length, gaps: r.gaps.length };
 }
