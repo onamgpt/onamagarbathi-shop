@@ -107,7 +107,7 @@ th{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tex
   }
 
   function loadScans(pin){
-    return fetch("/.netlify/functions/scan-log?pin=" + encodeURIComponent(pin) + "&days=30")
+    return fetch("/.netlify/functions/scan-log?pin=" + encodeURIComponent(pin) + "&days=90")
       .then(function(r){ return r.json(); })
       .then(function(d){
         var box = document.getElementById("scans");
@@ -116,7 +116,11 @@ th{font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--tex
         var rows = (d.states || []).slice(0, 15).map(function(s){
           return "<tr><td>" + esc(s[0]) + "</td><td>" + esc(s[1]) + "</td></tr>";
         }).join("");
-        box.innerHTML = "<b>" + d.total + " scans</b><table><tr><th>State</th><th>Scans</th></tr>" + rows + "</table>";
+        var trows = (d.tags || []).slice(0, 30).map(function(s){
+          return "<tr><td>" + esc(s[0]) + "</td><td>" + esc(s[1]) + "</td></tr>";
+        }).join("");
+        box.innerHTML = "<b>" + d.total + " scans · last 90 days</b><table><tr><th>State</th><th>Scans</th></tr>" + rows + "</table>" +
+          "<table style=\"margin-top:10px\"><tr><th>QR code (tag)</th><th>Scans</th></tr>" + trows + "</table>";
       });
   }
 

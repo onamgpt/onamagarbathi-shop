@@ -479,7 +479,10 @@ var VISIT_SOURCE = (function(){
 (function(){
   try{
     var p = new URLSearchParams(location.search);
-    var tag = p.get("src") || p.get("utm_source") || "";
+    // Box bookmarks carry channel/officer/region rather than src — count those
+    // too, so a bookmark scan is never invisible.
+    var bm = [p.get("channel"),p.get("officer"),p.get("region")].filter(Boolean).join("-");
+    var tag = p.get("src") || p.get("utm_source") || bm || (/^\/try/i.test(location.pathname) ? "try" : "");
     if(!tag) return;
     if(sessionStorage.getItem("rk_scan_logged")) return;
     sessionStorage.setItem("rk_scan_logged","1");
