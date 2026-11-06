@@ -31,6 +31,11 @@
   status = 200
 
 [[redirects]]
+  from = "/experience"
+  to = "/experience.html"
+  status = 200
+
+[[redirects]]
   from = "/uk/french"
   to = "/uk-french.html"
   status = 200

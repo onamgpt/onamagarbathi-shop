@@ -1336,6 +1336,11 @@ function handleProductDeepLink(){
   }
 }
 handleProductDeepLink();
+// /?add=id1,id2 — "Add to bag" from the /experience film page: put the packs in the cart and open it.
+(function(){try{var q=new URLSearchParams(location.search).get("add");if(!q)return;
+  q.split(",").forEach(function(id){id=String(id).trim();if(/^[a-z0-9-]{2,60}$/.test(id))addToCart(id);});
+  setTimeout(function(){try{var d=document.getElementById("cartDrawer");if(d&&!d.classList.contains("open"))toggleCart();}catch(e){}},500);
+  var u=new URL(location.href);u.searchParams.delete("add");history.replaceState(null,"",u.pathname+(u.search||"")+u.hash);}catch(e){}})();
 </script>
 </body>
 </html>
