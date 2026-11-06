@@ -98,6 +98,10 @@ footer .big em{color:var(--saffron)}
 footer .row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;margin-top:22px;font-size:12.5px;color:rgba(245,238,226,.45)}
 .rv{opacity:0;transform:translate3d(0,26px,0);filter:blur(6px);transition:opacity 1.1s cubic-bezier(.2,.7,.1,1),transform 1.1s cubic-bezier(.2,.7,.1,1),filter 1.1s}.rv.in{opacity:1;transform:none;filter:none}
 @media(max-width:900px){.closing .intro{grid-template-columns:1fr}.grid4{grid-template-columns:repeat(2,1fr)}.heritage{grid-template-columns:1fr}}
+.frame{position:absolute;inset:0;overflow:hidden}
+@media(min-width:1800px) and (min-height:900px){.stage{display:grid;place-items:center}.frame{position:relative;inset:auto;width:min(1600px,90vw);height:min(900px,86svh);border-radius:20px;box-shadow:0 40px 120px -40px rgba(230,165,47,.25),0 0 0 1px rgba(245,238,226,.06)}}
+.snd{position:fixed;right:clamp(18px,4vw,40px);top:76px;z-index:45;display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border-radius:999px;border:1px solid rgba(245,238,226,.3);background:rgba(11,9,7,.5);backdrop-filter:blur(8px);color:var(--ivory);font:400 10.5px/1 Jost;letter-spacing:.22em;text-transform:uppercase;cursor:pointer}
+.snd.on{border-color:var(--saffron);color:var(--saffron)}
 .play{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);z-index:45;display:inline-flex;align-items:center;gap:10px;height:42px;padding:0 18px;border-radius:999px;border:1px solid rgba(245,238,226,.35);background:rgba(11,9,7,.55);backdrop-filter:blur(8px);color:var(--ivory);font:400 11px/1 Jost;letter-spacing:.24em;text-transform:uppercase;cursor:pointer;transition:opacity .5s}
 .play.hide{opacity:0;pointer-events:none}
 @media(prefers-reduced-motion:reduce){.rv{opacity:1;transform:none;filter:none;transition:none}}
@@ -105,11 +109,12 @@ footer .row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;m
 </head>
 <body>
 <div id="pre" aria-hidden="true"><div><p class="disp">ONAM</p><div class="bar"><i id="preBar"></i></div><p class="lab" style="text-align:center;margin-top:14px;opacity:.45">The morning ritual · since 1922</p></div></div>
+<button class="snd" id="snd" type="button" aria-pressed="false">♪ Sound</button>
 <button class="play hide" id="play" type="button" aria-label="Pause film">❚❚ Pause</button>
 <header class="nav"><a class="wm" href="/">ONAM</a><a class="shop" href="/">Shop all →</a></header>
 <main>
 <section id="film" aria-label="The morning ritual — film">
-  <div class="stage">
+  <div class="stage"><div class="frame" id="frame">
     <canvas id="cv" aria-hidden="true"></canvas><div class="vig"></div>
     <div class="hero" id="hero">
       <div class="shade" data-out></div>
@@ -119,7 +124,7 @@ footer .row{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;m
     </div>
     <div class="outro" id="outro"><p class="disp"><span class="m"><span>Four fragrances.</span></span><span class="m"><span><em>One</em> morning ritual.</span></span></p></div>
     <div class="rail" id="rail"><i></i></div>
-  </div>
+  </div></div>
 </section>
 <section class="closing" id="set">
   <div class="wrap">
@@ -164,7 +169,7 @@ var ease=function(t){return 1-Math.pow(1-t,3);};
 var esc=function(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c];});};
 var mob=function(){return innerWidth<768;};
 var reduced=matchMedia("(prefers-reduced-motion: reduce)").matches;
-var stage=document.querySelector(".stage"), film=document.getElementById("film");
+var stage=document.getElementById("frame"), film=document.getElementById("film");
 
 // cards + rail + grid
 var cards=P.map(function(p,i){
@@ -266,6 +271,28 @@ function autoStep(t){
   requestAnimationFrame(autoStep);
 }
 function startAuto(){if(started||reduced)return;started=true;var pr=progress();if(pr.u<.9){playBtn.classList.remove("hide");setAuto(true);}requestAnimationFrame(autoStep);}
+
+// ---- Music: a tanpura drone (Pa–Sa–Sa–low Sa) with a soft temple bell, made live in the browser ----
+var sndBtn=document.getElementById("snd"), AC=null, master=null, timer=null, bellT=null;
+function makeReverb(ac){var len=ac.sampleRate*3.2,b=ac.createBuffer(2,len,ac.sampleRate);for(var c=0;c<2;c++){var d=b.getChannelData(c);for(var i=0;i<len;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/len,2.6);}var cv=ac.createConvolver();cv.buffer=b;return cv;}
+function pluck(f,t,g){ // rich string with jawari-like shimmer
+  for(var n=1;n<=9;n++){var o=AC.createOscillator(),a=AC.createGain();o.type="sine";o.frequency.value=f*n*(1+(n>1?(Math.random()-.5)*.0016:0));
+    var amp=g/Math.pow(n,.9)*(n===1?1:.75);a.gain.setValueAtTime(0,t);a.gain.linearRampToValueAtTime(amp,t+.02+n*.004);a.gain.exponentialRampToValueAtTime(.0001,t+4.2+ (9-n)*.25);
+    o.connect(a);a.connect(master);o.start(t);o.stop(t+6.6);}
+}
+function bell(t){[1,2.76,5.4,8.93].forEach(function(r,i){var o=AC.createOscillator(),a=AC.createGain();o.frequency.value=620*r;a.gain.setValueAtTime(0,t);a.gain.linearRampToValueAtTime(.05/(i+1),t+.005);a.gain.exponentialRampToValueAtTime(.0001,t+3.6-i*.6);o.connect(a);a.connect(master);o.start(t);o.stop(t+4);});}
+function startMusic(){
+  if(!AC){var C=window.AudioContext||window.webkitAudioContext;if(!C)return;AC=new C();master=AC.createGain();master.gain.value=0;var rv=makeReverb(AC),wet=AC.createGain(),dry=AC.createGain();wet.gain.value=.55;dry.gain.value=.7;master.connect(dry);master.connect(rv);rv.connect(wet);dry.connect(AC.destination);wet.connect(AC.destination);}
+  if(AC.state==="suspended")AC.resume();
+  master.gain.cancelScheduledValues(AC.currentTime);master.gain.linearRampToValueAtTime(.22,AC.currentTime+2.5);
+  var SA=138.59,seq=[SA*.75,SA*2,SA*2,SA],i=0,next=AC.currentTime+.1;
+  clearInterval(timer);timer=setInterval(function(){while(next<AC.currentTime+.6){pluck(seq[i%4],next,i%4===3?.11:.08);next+=i%4===3?1.9:1.05;i++;}},150);
+  clearInterval(bellT);bellT=setInterval(function(){bell(AC.currentTime+.05);},17000);setTimeout(function(){if(AC)bell(AC.currentTime+.05);},2500);
+}
+function stopMusic(){if(!AC)return;master.gain.cancelScheduledValues(AC.currentTime);master.gain.linearRampToValueAtTime(0,AC.currentTime+1.2);clearInterval(timer);clearInterval(bellT);}
+sndBtn.addEventListener("click",function(e){e.stopPropagation();var on=sndBtn.getAttribute("aria-pressed")!=="true";sndBtn.setAttribute("aria-pressed",on);sndBtn.classList.toggle("on",on);sndBtn.textContent=on?"♪ Sound on":"♪ Sound";if(on)startMusic();else stopMusic();});
+document.addEventListener("visibilitychange",function(){if(!AC)return;if(document.hidden)AC.suspend();else if(sndBtn.getAttribute("aria-pressed")==="true")AC.resume();});
+
 // show/hide the button only while the film is on screen
 addEventListener("scroll",function(){var r=film.getBoundingClientRect();playBtn.classList.toggle("hide",!started||r.bottom<innerHeight*.6);},{passive:true});
 })();
