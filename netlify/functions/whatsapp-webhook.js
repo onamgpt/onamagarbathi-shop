@@ -181,6 +181,24 @@ export default async (req) => {
         } catch (e) { /* never block the reply */ }
       }
 
+      // Verification codes (e.g. when linking this number to Instagram / the
+      // Facebook Page) arrive as WhatsApp messages here, since the SIM is not
+      // in a phone. Keep the last 10 so Claude/Ravi can read them.
+      const rawBody = (msg.text && msg.text.body) || "";
+      if (/\b\d{3}[- ]?\d{3}\b/.test(rawBody) && /code|verif|confirm|otp/i.test(rawBody) && SUPABASE_URL && SUPABASE_KEY) {
+        try {
+          const hc = { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" };
+          const rc = await fetch(SUPABASE_URL + "/rest/v1/kv?owner=eq.main&k=eq.wa_codes&select=v", { headers: hc });
+          const jc = await rc.json();
+          const list = (Array.isArray(jc) && jc[0] && jc[0].v && jc[0].v.list) ? jc[0].v.list : [];
+          list.push({ at: new Date().toISOString(), from, text: rawBody.slice(0, 300) });
+          await fetch(SUPABASE_URL + "/rest/v1/kv?on_conflict=owner,k", { method: "POST",
+            headers: Object.assign({}, hc, { "Prefer": "resolution=merge-duplicates" }),
+            body: JSON.stringify({ owner: "main", k: "wa_codes", v: { list: list.slice(-10) } }) });
+        } catch (e) {}
+        continue;   // never auto-reply to a verification code
+      }
+
       // Any inbound message opens a 24-hour window in which we may send free
       // text to that number. Record when, so the scheduler can tell whether a
       // plain message is allowed or whether it has to fall back to a template.
