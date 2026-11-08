@@ -11,6 +11,63 @@
 //   Callback URL:  https://onamagarbathi.com/.netlify/functions/whatsapp-webhook
 //   Verify token:  whatever you set as WHATSAPP_WEBHOOK_VERIFY_TOKEN in Netlify
 
+
+// ── Instant order reply ────────────────────────────────────────────────
+// Someone asks "I want to order: Kesar Chandan…" / "price?" → reply within
+// seconds with the pack photo, price and a one-tap link that puts it in the
+// cart (/?add=id) so they can pay right away. Products are read from the live
+// storefront, so prices here always match the website.
+const SITE = "https://onamagarbathi.com";
+let _cat = null, _catAt = 0;
+async function catalog() {
+  if (_cat && Date.now() - _catAt < 600000) return _cat;
+  try {
+    const html = await (await fetch(SITE + "/", { headers: { "User-Agent": "onam-wa-reply" } })).text();
+    const m = html.match(/var PRODUCTS\s*=\s*(\[[\s\S]*?\}\]);/);
+    _cat = m ? JSON.parse(m[1]) : []; _catAt = Date.now();
+  } catch (e) { _cat = _cat || []; }
+  return _cat;
+}
+const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+function findProducts(list, text) {
+  const t = " " + norm(text) + " ";
+  const hits = list.filter((p) => p.mrp && t.indexOf(" " + norm(p.name) + " ") >= 0);
+  // longest names first, so "Vaishak Special" wins over "Vaishak"
+  hits.sort((a, b) => norm(b.name).length - norm(a.name).length);
+  const out = [];
+  hits.forEach((p) => { if (!out.some((o) => norm(o.name).indexOf(norm(p.name)) >= 0)) out.push(p); });
+  return out.slice(0, 3);
+}
+async function waSend(to, payload) {
+  const PHONE_NUMBER_ID = Netlify.env.get("WHATSAPP_PHONE_NUMBER_ID");
+  const ACCESS_TOKEN = Netlify.env.get("WHATSAPP_ACCESS_TOKEN");
+  if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) return;
+  await fetch("https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages", {
+    method: "POST", headers: { "Authorization": "Bearer " + ACCESS_TOKEN, "Content-Type": "application/json" },
+    body: JSON.stringify(Object.assign({ messaging_product: "whatsapp", to }, payload)) }).catch(() => {});
+}
+const OFFER = "\n🚚 Free delivery on orders above ₹120\n🎁 Free perfume roll-on gift with your order";
+async function orderReply(from, rawText) {
+  const list = await catalog();
+  const hits = findProducts(list, rawText);
+  if (hits.length) {
+    for (const p of hits) {
+      const link = SITE + "/?add=" + encodeURIComponent(p.id);
+      const cap = "*" + p.name + "* (" + p.brand + ")\n₹" + p.mrp + (p.packSize ? " · " + p.packSize : "") + " · ✅ In stock" + OFFER +
+        "\n\n👉 Tap to buy in 1 minute (pay by UPI / card):\n" + link;
+      const img = SITE + "/catalog-images/" + p.id + ".jpg";
+      let hasImg = false; try { hasImg = (await fetch(img, { method: "HEAD" })).ok; } catch (e) {}
+      await waSend(from, hasImg ? { type: "image", image: { link: img, caption: cap } } : { type: "text", text: { body: cap } });
+    }
+    return true;
+  }
+  const best = list.filter((p) => p.mrp && /vaishak-premium|kesar-chandan|golden-buddha|ganesh-flora/.test(p.id));
+  await waSend(from, { type: "text", text: { body: "Namaste! 🙏 Thank you for your interest in Onam Agarbathi.\n\n" +
+    best.map((p) => "• " + p.name + " – ₹" + p.mrp + "  👉 " + SITE + "/?add=" + p.id).join("\n") +
+    "\n\nSee all fragrances: " + SITE + OFFER + "\n\nTell us which fragrance you like and we'll help." } });
+  return true;
+}
+
 export default async (req) => {
   const url = new URL(req.url);
 
@@ -161,6 +218,8 @@ export default async (req) => {
             })
           }).catch(() => {});
         }
+      } else if (from && /(want to order|price|rate|cost|available|availability|buy|order|how much|kitna|daam)/.test(text)) {
+        await orderReply(from, (msg.text && msg.text.body) || "");
       } else if (isFirstContact && from) {
         // First message ever from this number and not an opt-out - almost
         // certainly someone who scanned the box QR code. Free text is
