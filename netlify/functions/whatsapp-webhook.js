@@ -38,13 +38,45 @@ function findProducts(list, text) {
   hits.forEach((p) => { if (!out.some((o) => norm(o.name).indexOf(norm(p.name)) >= 0)) out.push(p); });
   return out.slice(0, 3);
 }
+// Token: the tracker's API Key Vault copy (known good) first, then Netlify env.
+let _tok = null;
+async function waToken() {
+  if (_tok) return _tok;
+  const SB = Netlify.env.get("SUPABASE_URL"), K = Netlify.env.get("SUPABASE_SERVICE_KEY");
+  try {
+    const r = await fetch(SB + "/rest/v1/app_secrets?name=eq.WHATSAPP_ACCESS_TOKEN&select=value", { headers: { apikey: K, Authorization: "Bearer " + K } });
+    const j = await r.json(); if (j && j[0] && j[0].value) _tok = String(j[0].value).trim();
+  } catch (e) {}
+  return _tok || Netlify.env.get("WHATSAPP_ACCESS_TOKEN");
+}
+async function logHit(line) {
+  const SB = Netlify.env.get("SUPABASE_URL"), K = Netlify.env.get("SUPABASE_SERVICE_KEY");
+  if (!SB || !K) return;
+  try {
+    const h = { apikey: K, Authorization: "Bearer " + K, "Content-Type": "application/json" };
+    const j = await (await fetch(SB + "/rest/v1/kv?owner=eq.main&k=eq.wa_webhook_hits&select=v", { headers: h })).json();
+    const cur = (Array.isArray(j) && j[0] && j[0].v && j[0].v.log) ? j[0].v.log : [];
+    cur.push(new Date().toISOString() + "  " + line);
+    await fetch(SB + "/rest/v1/kv?on_conflict=owner,k", { method: "POST", headers: Object.assign({}, h, { Prefer: "resolution=merge-duplicates" }),
+      body: JSON.stringify({ owner: "main", k: "wa_webhook_hits", v: { log: cur.slice(-40) } }) });
+  } catch (e) {}
+}
+const PHONE_ID = () => Netlify.env.get("WHATSAPP_PHONE_NUMBER_ID") || "1152842484587685";   // +91 83103 68142
 async function waSend(to, payload) {
-  const PHONE_NUMBER_ID = Netlify.env.get("WHATSAPP_PHONE_NUMBER_ID");
-  const ACCESS_TOKEN = Netlify.env.get("WHATSAPP_ACCESS_TOKEN");
-  if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) return;
-  await fetch("https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages", {
-    method: "POST", headers: { "Authorization": "Bearer " + ACCESS_TOKEN, "Content-Type": "application/json" },
-    body: JSON.stringify(Object.assign({ messaging_product: "whatsapp", to }, payload)) }).catch(() => {});
+  const tok = await waToken();
+  try {
+    let r = await fetch("https://graph.facebook.com/v21.0/" + PHONE_ID() + "/messages", {
+      method: "POST", headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" },
+      body: JSON.stringify(Object.assign({ messaging_product: "whatsapp", to }, payload)) });
+    let j = await r.json().catch(() => ({}));
+    if (!r.ok && PHONE_ID() !== "1152842484587685") {   // env phone id stale → use the known one
+      r = await fetch("https://graph.facebook.com/v21.0/1152842484587685/messages", {
+        method: "POST", headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({ messaging_product: "whatsapp", to }, payload)) });
+      j = await r.json().catch(() => ({}));
+    }
+    await logHit("reply to " + to + " " + (r.ok ? "sent" : "FAILED " + JSON.stringify(j.error || j).slice(0, 200)));
+  } catch (e) { await logHit("reply to " + to + " ERROR " + String(e).slice(0, 150)); }
 }
 const OFFER = "\n🚚 Free delivery on every order\n🎁 Free perfume roll-on gift with your order";
 async function orderReply(from, rawText) {
@@ -206,19 +238,11 @@ export default async (req) => {
         // Confirm the opt-out back to the customer — required good practice,
         // and a plain-text reply is allowed since they just messaged us
         // (inside the 24h customer service window).
-        const PHONE_NUMBER_ID = Netlify.env.get("WHATSAPP_PHONE_NUMBER_ID");
-        const ACCESS_TOKEN = Netlify.env.get("WHATSAPP_ACCESS_TOKEN");
-        if (PHONE_NUMBER_ID && ACCESS_TOKEN) {
-          fetch("https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages", {
-            method: "POST",
-            headers: { "Authorization": "Bearer " + ACCESS_TOKEN, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              to: from,
+        {
+          await waSend(from, {
               type: "text",
               text: { body: "You've been unsubscribed from promotional messages. You'll still receive order updates for anything you order. Thank you!" }
-            })
-          }).catch(() => {});
+          });
         }
       } else if (from && /(want to order|price|rate|cost|available|availability|buy|order|how much|kitna|daam)/.test(text)) {
         await orderReply(from, (msg.text && msg.text.body) || "");
@@ -226,21 +250,13 @@ export default async (req) => {
         // First message ever from this number and not an opt-out - almost
         // certainly someone who scanned the box QR code. Free text is
         // allowed here: they just messaged us, which opens the 24h window.
-        const PHONE_NUMBER_ID = Netlify.env.get("WHATSAPP_PHONE_NUMBER_ID");
-        const ACCESS_TOKEN = Netlify.env.get("WHATSAPP_ACCESS_TOKEN");
-        if (PHONE_NUMBER_ID && ACCESS_TOKEN) {
-          fetch("https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages", {
-            method: "POST",
-            headers: { "Authorization": "Bearer " + ACCESS_TOKEN, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              messaging_product: "whatsapp",
-              to: from,
+        {
+          await waSend(from, {
               type: "text",
               text: { body: "Namaste! \ud83d\ude4f Welcome to Onam Agarbathi - incense since 1972. " +
                 "Browse our products at onamagarbathi.com, or just tell us what you're looking for " +
                 "and we'll help. Reply STOP anytime to opt out of promotional messages." }
-            })
-          }).catch(() => {});
+          });
         }
       }
     }
