@@ -46,7 +46,7 @@ async function waSend(to, payload) {
     method: "POST", headers: { "Authorization": "Bearer " + ACCESS_TOKEN, "Content-Type": "application/json" },
     body: JSON.stringify(Object.assign({ messaging_product: "whatsapp", to }, payload)) }).catch(() => {});
 }
-const OFFER = "\n🚚 Free delivery on orders above ₹120\n🎁 Free perfume roll-on gift with your order";
+const OFFER = "\n🚚 Free delivery on every order\n🎁 Free perfume roll-on gift with your order";
 async function orderReply(from, rawText) {
   const list = await catalog();
   const hits = findProducts(list, rawText);
