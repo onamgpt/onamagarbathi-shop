@@ -222,6 +222,28 @@ export default async (req) => {
         } catch (e) { /* tracking must never block the reply below */ }
       }
 
+      // Save every customer who writes to the Meta number (tracker → 👥 Customers).
+      // Festival greetings go to this list; STOP marks them opted out.
+      if (from && msg.type !== "unsupported" && SUPABASE_URL && SUPABASE_KEY && !/^44787613/.test(from)) {
+        try {
+          const hu = { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" };
+          const prof = ((value.contacts || []).find((c) => c.wa_id === from) || (value.contacts || [])[0] || {});
+          const nm = (prof.profile && prof.profile.name) || null;
+          const ex = await (await fetch(SUPABASE_URL + "/rest/v1/wa_customers?phone=eq." + from + "&select=msgs,asked,name", { headers: hu })).json();
+          const cur = (Array.isArray(ex) && ex[0]) || null;
+          let asked = (cur && cur.asked) || "";
+          try { const hits = findProducts(await catalog(), (msg.text && msg.text.body) || "").map((p) => p.name);
+            hits.forEach((n) => { if (asked.split(", ").indexOf(n) < 0) asked = asked ? asked + ", " + n : n; }); } catch (e) {}
+          const row = { phone: from, last_at: new Date().toISOString(), msgs: ((cur && cur.msgs) || 0) + 1, asked: asked.slice(0, 300) };
+          if (nm || !cur) row.name = nm || (cur && cur.name) || null;
+          if (!cur) { row.first_at = row.last_at; row.source = "whatsapp"; }
+          if (/^(stop|unsubscribe|opt.?out)\b/.test(text)) row.opted_out = true;
+          if (/^(start|subscribe)\b/.test(text)) row.opted_out = false;
+          await fetch(SUPABASE_URL + "/rest/v1/wa_customers?on_conflict=phone", { method: "POST",
+            headers: Object.assign({}, hu, { "Prefer": "resolution=merge-duplicates" }), body: JSON.stringify(row) });
+        } catch (e) { /* never block the reply */ }
+      }
+
       // A number pressing the box's WhatsApp link and a number replying inside
       // an existing thread both land here with no distinction otherwise. Only
       // the box case should get a welcome - not every message in an ongoing
