@@ -264,7 +264,7 @@ export default async (req) => {
         }
       } else if (from && /(want to order|price|rate|cost|available|availability|buy|order|how much|kitna|daam)/.test(text)) {
         await orderReply(from, (msg.text && msg.text.body) || "");
-      } else if (isFirstContact && from) {
+      } else if (isFirstContact && from && msg.type === "text") {
         // First message ever from this number and not an opt-out - almost
         // certainly someone who scanned the box QR code. Free text is
         // allowed here: they just messaged us, which opens the 24h window.
