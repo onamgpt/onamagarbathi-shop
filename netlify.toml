@@ -53,3 +53,10 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Product and hero images live in /img as separate files (moved out of
+# index.html in Nov 2026 to cut bandwidth). Let browsers cache them for 7 days.
+[[headers]]
+  for = "/img/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
