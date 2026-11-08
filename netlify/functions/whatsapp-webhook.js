@@ -77,7 +77,9 @@ export default async (req) => {
     const token = url.searchParams.get("hub.verify_token");
     const challenge = url.searchParams.get("hub.challenge");
 
-    if (mode === "subscribe" && VERIFY_TOKEN && token === VERIFY_TOKEN) {
+    // "onamreply2026" is the token typed into Meta's webhook settings (Nov 2026).
+    // It only proves we own this URL during Meta's one-time check; not a credential.
+    if (mode === "subscribe" && token && (token === VERIFY_TOKEN || token === "onamreply2026")) {
       return new Response(challenge, { status: 200 });
     }
     return new Response("Forbidden", { status: 403 });
