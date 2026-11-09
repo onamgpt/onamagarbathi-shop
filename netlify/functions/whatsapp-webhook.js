@@ -181,6 +181,35 @@ export default async (req) => {
         } catch (e) { /* never block the reply */ }
       }
 
+      // "Received my order" (button on the tracking message) or a RECEIVED reply → close the
+      // customer's dispatched website order as Delivered, thank them, ask for a review.
+      const said = String((msg.button && (msg.button.text || msg.button.payload)) ||
+        (msg.interactive && msg.interactive.button_reply && msg.interactive.button_reply.title) || (msg.text && msg.text.body) || "").trim().toLowerCase();
+      if (from && SUPABASE_URL && SUPABASE_KEY && /^(received|recieved|recived|delivered|got it|got my order|mil gaya|order received)/.test(said)) {
+        try {
+          const hd = { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY, "Content-Type": "application/json" };
+          const all = await (await fetch(SUPABASE_URL + "/rest/v1/orders?status=eq.Dispatched&select=id,customer_name,customer_phone,dispatched_at&limit=300", { headers: hd })).json();
+          const last10 = from.slice(-10);
+          const invHint = (said.match(/onamonline\/\S+/) || [])[0];
+          const mine = (Array.isArray(all) ? all : []).filter((o) => String(o.customer_phone || "").replace(/\D/g, "").slice(-10) === last10)
+            .filter((o) => !invHint || String(o.id).toLowerCase() === invHint);
+          if (mine.length) {
+            const now = new Date().toISOString();
+            for (const o of mine) await fetch(SUPABASE_URL + "/rest/v1/orders?id=eq." + encodeURIComponent(o.id), { method: "PATCH", headers: hd,
+              body: JSON.stringify({ status: "Delivered", delivered_at: now, updated_at: now, updated_by: "customer (WhatsApp)" }) });
+            const nm = String(mine[0].customer_name || "").trim().split(/\s+/)[0];
+            await waSend(from, { type: "text", text: { body: "Thank you" + (nm ? " " + nm : "") + "! 🙏 We're glad your order reached you. Enjoy the fragrance.\n\nWhen you need a refill: https://onamagarbathi.com\nIf you liked it, a quick word to your friends helps our 100-year-old family business a lot." } });
+          } else {
+            await waSend(from, { type: "text", text: { body: "Thank you! 🙏 We couldn't find an open order for this number — if it was ordered with a different phone number, please send the order number and we'll update it." } });
+          }
+        } catch (e) {}
+        continue;
+      }
+      if (from && /^not received yet/.test(said)) {
+        await waSend(from, { type: "text", text: { body: "Thanks for letting us know. Parcels usually take 3–7 days. You can follow it with the tracking link above; if it hasn't arrived in 7 days, reply here and we'll chase the courier for you." } });
+        continue;
+      }
+
       // Verification codes (e.g. when linking this number to Instagram / the
       // Facebook Page) arrive as WhatsApp messages here, since the SIM is not
       // in a phone. Keep the last 10 so Claude/Ravi can read them.
