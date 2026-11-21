@@ -24,10 +24,23 @@ export default async (req) => {
 
   const cors = { "Access-Control-Allow-Origin": "*", "Content-Type": "application/json" };
 
-  const PHONE_NUMBER_ID = Netlify.env.get("WHATSAPP_PHONE_NUMBER_ID");
+  const PHONE_NUMBER_ID = Netlify.env.get("WHATSAPP_PHONE_NUMBER_ID") || "1152842484587685";
   const ACCESS_TOKEN = Netlify.env.get("WHATSAPP_ACCESS_TOKEN");
 
-  if (!PHONE_NUMBER_ID || !ACCESS_TOKEN) {
+  // Token: the tracker's API Key Vault copy (known good, never-expiring system-user
+  // token) first, then the Netlify env copy — same order whatsapp-webhook uses.
+  // The env copy alone may be an old expired token (21 Nov 2026).
+  let VAULT_TOKEN = null;
+  try {
+    const SB = Netlify.env.get("SUPABASE_URL"), K = Netlify.env.get("SUPABASE_SERVICE_KEY");
+    if (SB && K) {
+      const tr = await fetch(SB + "/rest/v1/app_secrets?name=eq.WHATSAPP_ACCESS_TOKEN&select=value", { headers: { apikey: K, Authorization: "Bearer " + K } });
+      const tj = await tr.json(); if (tj && tj[0] && tj[0].value) VAULT_TOKEN = String(tj[0].value).trim();
+    }
+  } catch (e) {}
+  const TOKENS = [VAULT_TOKEN, ACCESS_TOKEN].filter((t, i, a) => t && a.indexOf(t) === i);
+
+  if (!PHONE_NUMBER_ID || !TOKENS.length) {
     return new Response(JSON.stringify({ ok: false, skipped: true, reason: "WhatsApp env vars not set on this site" }), { status: 200, headers: cors });
   }
 
@@ -76,12 +89,17 @@ export default async (req) => {
       }
     };
 
-    const r = await fetch("https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages", {
-      method: "POST",
-      headers: { "Authorization": "Bearer " + ACCESS_TOKEN, "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    const j = await r.json().catch(() => null);
+    let j = null;
+    for (const tok of TOKENS) {
+      const r = await fetch("https://graph.facebook.com/v21.0/" + PHONE_NUMBER_ID + "/messages", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + tok, "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      j = await r.json().catch(() => null);
+      // Only an auth problem (code 190 / OAuthException) is worth retrying with the other token.
+      if (!(j && j.error && (j.error.code === 190 || j.error.type === "OAuthException"))) break;
+    }
     // Record Meta's real answer; on failure Ravi is WhatsApped and the customer
     // gets the same confirmation from the office number instead.
     const res = await logSend({ to: formatPhone(phone), template: "order_confirm_utility", orderId: orderNo,
