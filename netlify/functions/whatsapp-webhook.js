@@ -1,3 +1,4 @@
+import { recordStatuses, alertRavi } from "../lib/wa-log.mjs";
 // Receives inbound WhatsApp messages from Meta. Two jobs only:
 //  1. GET — the one-time webhook verification handshake Meta requires when
 //     you register this URL in the Meta Developer Console.
@@ -157,6 +158,20 @@ export default async (req) => {
     const change = (entry.changes && entry.changes[0]) || {};
     const value = change.value || {};
     const messages = value.messages || [];
+
+    // Meta pausing/rejecting/disabling one of our templates silently stops every
+    // customer message that uses it — tell Ravi straight away (21 Nov 2026).
+    if (change.field === "message_template_status_update" && value.event && !/^approved$/i.test(value.event)) {
+      try { await alertRavi("⚠️ Meta changed a WhatsApp template\nTemplate: " + (value.message_template_name || "?") +
+        "\nNew status: " + value.event + (value.reason && value.reason !== "NONE" ? "\nReason: " + value.reason : "") +
+        "\nCustomer messages using it will fail until it is fixed in WhatsApp Manager."); } catch (e) {}
+    }
+
+    // Delivery callbacks for messages we sent (sent/delivered/read/failed) →
+    // wa_send_log; a failed one WhatsApps Ravi (21 Nov 2026).
+    if (Array.isArray(value.statuses) && value.statuses.length) {
+      try { await recordStatuses(value.statuses); } catch (e) {}
+    }
 
     for (const msg of messages) {
       const from = msg.from; // sender's WhatsApp number, no '+'

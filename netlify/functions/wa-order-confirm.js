@@ -8,6 +8,8 @@
 // Best-effort: never throws, never blocks the checkout flow if WhatsApp or
 // Supabase is briefly unavailable.
 
+import { logSend } from "../lib/wa-log.mjs";
+
 export default async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("", {
@@ -79,12 +81,26 @@ export default async (req) => {
       headers: { "Authorization": "Bearer " + ACCESS_TOKEN, "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    const j = await r.json();
-    return new Response(JSON.stringify({ ok: !j.error, result: j }), { status: 200, headers: cors });
+    const j = await r.json().catch(() => null);
+    // Record Meta's real answer; on failure Ravi is WhatsApped and the customer
+    // gets the same confirmation from the office number instead.
+    const res = await logSend({ to: formatPhone(phone), template: "order_confirm_utility", orderId: orderNo,
+      source: body.source || "website", reply: j, customerName: cust.name || "", fallbackText: fallbackText(name, orderNo, total) });
+    return new Response(JSON.stringify({ ok: res.ok, result: j, logged: res }), { status: 200, headers: cors });
   } catch (e) {
-    return new Response(JSON.stringify({ ok: false, error: String(e) }), { status: 200, headers: cors });
+    const res = await logSend({ to: formatPhone(phone), template: "order_confirm_utility", orderId: orderNo,
+      source: body.source || "website", error: "send error: " + String(e), customerName: cust.name || "", fallbackText: fallbackText(name, orderNo, total) });
+    return new Response(JSON.stringify({ ok: false, error: String(e), logged: res }), { status: 200, headers: cors });
   }
 };
+
+function fallbackText(name, orderNo, total) {
+  const first = String(name || "there").trim().split(/\s+/)[0];
+  return "🙏 Hi " + first + ", thank you for your order with *Onam Agarbathi*.\n" +
+    "Order: " + orderNo + "\nAmount paid: Rs." + total + "\n" +
+    "We have received your order and are packing it now. We will send you the courier and tracking details once it is dispatched.\n\n" +
+    "Questions? Reply here or WhatsApp 83103 68142.";
+}
 
 export const config = {
   path: "/.netlify/functions/wa-order-confirm"
